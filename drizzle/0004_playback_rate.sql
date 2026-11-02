@@ -1,0 +1,1 @@
+ALTER TABLE `projects` ADD `playback_rate` real DEFAULT 1 NOT NULL;

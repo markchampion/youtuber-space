@@ -1,0 +1,57 @@
+{
+  "name": "doodle-video-studio",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "setup": "node scripts/setup.mjs",
+    "dev": "next dev -p 3001",
+    "build": "next build",
+    "start": "next start -p 3001",
+    "lint": "eslint",
+    "test": "vitest run",
+    "db:generate": "drizzle-kit generate",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.128.0",
+    "@elevenlabs/elevenlabs-js": "^2.68.0",
+    "@remotion/bundler": "^4.0.527",
+    "@remotion/google-fonts": "^4.0.527",
+    "@remotion/media-utils": "^4.0.527",
+    "@remotion/player": "^4.0.527",
+    "@remotion/renderer": "^4.0.527",
+    "@tanstack/react-query": "^5.103.2",
+    "better-sqlite3": "^12.11.1",
+    "clsx": "^2.1.1",
+    "drizzle-orm": "^0.45.3",
+    "lucide-react": "^1.47.0",
+    "nanoid": "^5.1.16",
+    "next": "16.3.6",
+    "openai": "^7.23.0",
+    "p-limit": "^7.3.3",
+    "react": "19.2.8",
+    "react-dom": "19.2.8",
+    "remotion": "^4.0.527",
+    "server-only": "^0.0.1",
+    "sharp": "^0.35.4",
+    "tailwind-merge": "^3.7.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "drizzle-kit": "^0.31.11",
+    "eslint": "^9",
+    "eslint-config-next": "16.3.6",
+    "tailwindcss": "^4",
+    "tsx": "^4.23.15",
+    "typescript": "^5",
+    "vitest": "^3.2.7"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}

@@ -1,0 +1,28 @@
+@import "tailwindcss";
+
+:root {
+  --background: #faf8f3;
+  --foreground: #1c1917;
+  --brand: #f58220;
+  --brand-ink: #b45309;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+  --font-marker: var(--font-marker);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+}
+
+/* Keep native range inputs on-brand */
+input[type="range"] {
+  accent-color: var(--brand);
+}
