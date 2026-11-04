@@ -5,6 +5,7 @@ import type { z } from "zod";
 import { env, modelFor } from "@/lib/env";
 import { PRICES } from "@/lib/claude-models";
 import { cliJSON, cliText } from "./claude-cli";
+import { codexJSON, codexText } from "./codex-text";
 import { recordCost } from "@/lib/costs";
 
 let client: { key: string; api: Anthropic } | null = null;
@@ -76,9 +77,15 @@ function cliOpts(o: Opts) {
   return { ...o, model, effort: supportsEffort(model) ? o.effort : undefined, timeoutMs: o.kind === "script" ? 15 * 60_000 : undefined };
 }
 
+/** Settings → "Codex (my ChatGPT plan)": Claude model presets don't apply; Codex uses its own model. */
+function codexOpts(o: Opts) {
+  return { ...o, timeoutMs: o.kind === "script" ? 15 * 60_000 : undefined };
+}
+
 /** Structured output: returns data validated against the zod schema. */
 export async function claudeJSON<S extends z.ZodType>(schema: S, o: Opts): Promise<z.infer<S>> {
   if (env.claudeBackend === "cli") return cliJSON(schema, cliOpts(o));
+  if (env.claudeBackend === "codex") return codexJSON(schema, codexOpts(o));
   const p = baseParams(o);
   const stream = getClient().beta.messages.stream({
     ...p,
@@ -96,6 +103,7 @@ export async function claudeJSON<S extends z.ZodType>(schema: S, o: Opts): Promi
 /** Streamed plain text. `onText` receives deltas as they arrive. */
 export async function claudeText(o: Opts & { onText?: (delta: string) => void }): Promise<string> {
   if (env.claudeBackend === "cli") return cliText(cliOpts(o));
+  if (env.claudeBackend === "codex") return codexText(codexOpts(o));
   const p = baseParams(o);
   const stream = getClient().beta.messages.stream({
     ...p,

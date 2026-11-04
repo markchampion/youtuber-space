@@ -35,8 +35,13 @@ export const env = {
   get imageConcurrency() {
     return Math.max(1, Number(getSetting("IMAGE_CONCURRENCY")) || 4);
   },
+  /** Where text is written: Anthropic API, Claude Code CLI, or Codex CLI (for people without a Claude plan). */
   get claudeBackend() {
-    return getSetting("CLAUDE_BACKEND") === "cli" ? ("cli" as const) : ("api" as const);
+    const v = getSetting("CLAUDE_BACKEND");
+    return v === "cli" || v === "codex" ? v : ("api" as const);
+  },
+  get codexTextModel() {
+    return getSetting("CODEX_TEXT_MODEL");
   },
   get imageBackend() {
     return getSetting("IMAGE_BACKEND") === "codex" ? ("codex" as const) : ("api" as const);
@@ -61,7 +66,7 @@ export function sampleRateFromFormat(format: string): number {
 /** A provider counts as configured when its key is set or it runs through a subscription CLI. */
 export function keyStatus() {
   return {
-    anthropic: env.claudeBackend === "cli" || Boolean(env.anthropicKey),
+    anthropic: env.claudeBackend !== "api" || Boolean(env.anthropicKey),
     elevenlabs: Boolean(env.elevenLabsKey),
     openai: env.imageBackend === "codex" || Boolean(env.openaiKey),
     dryRun: env.dryRun,

@@ -4,6 +4,7 @@ import OpenAI from "openai";
 import { handler } from "@/lib/api";
 import { env, modelFor } from "@/lib/env";
 import { cliPing } from "@/lib/ai/claude-cli";
+import { codexPing } from "@/lib/ai/codex-text";
 import { CodexImageProvider } from "@/lib/image/codex";
 
 /** Checks the saved key with a cheap, read-only call (no generation, no cost). */
@@ -30,6 +31,11 @@ export const POST = handler(async (req: Request) => {
         const t = Date.now();
         const reply = await cliPing(modelFor("ideas"));
         return Response.json({ ok: true, message: `Claude Code answered "${reply.slice(0, 20)}" in ${((Date.now() - t) / 1000).toFixed(1)}s, using your Claude plan.` });
+      }
+      case "CODEX_TEXT": {
+        const t = Date.now();
+        const reply = await codexPing();
+        return Response.json({ ok: true, message: `Codex answered "${reply.slice(0, 20)}" in ${((Date.now() - t) / 1000).toFixed(1)}s, using your ChatGPT plan.` });
       }
       case "CODEX_IMAGE": {
         const t = Date.now();

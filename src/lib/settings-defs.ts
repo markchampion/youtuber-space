@@ -10,6 +10,7 @@ export type SettingKey =
   | "IMAGE_BACKEND"
   | "CLAUDE_CLI_PATH"
   | "CODEX_CLI_PATH"
+  | "CODEX_TEXT_MODEL"
   | "CLAUDE_PRESET"
   | ReturnType<typeof customKey>
   | "ELEVENLABS_MODEL"
@@ -135,12 +136,13 @@ export const MODEL_SETTINGS: SettingDef[] = [
 export const BACKEND_SETTINGS: SettingDef[] = [
   {
     key: "CLAUDE_BACKEND",
-    label: "Claude connection",
-    help: "API key (pay per use) or Claude Code CLI (your Claude plan).",
+    label: "Text connection",
+    help: "Anthropic API key (pay per use), Claude Code CLI (your Claude plan), or Codex CLI (your ChatGPT plan, if you have no Claude plan).",
     default: "api",
     options: [
       { value: "api", label: "API key" },
       { value: "cli", label: "Claude Code (my plan)" },
+      { value: "codex", label: "Codex (my ChatGPT plan)" },
     ],
   },
   {
@@ -155,6 +157,7 @@ export const BACKEND_SETTINGS: SettingDef[] = [
   },
   { key: "CLAUDE_CLI_PATH", label: "Claude CLI path", help: "Leave empty to auto-detect.", default: "" },
   { key: "CODEX_CLI_PATH", label: "Codex CLI path", help: "Leave empty to auto-detect.", default: "" },
+  { key: "CODEX_TEXT_MODEL", label: "Codex model for text", help: "Leave empty to use Codex's default model.", default: "" },
 ];
 
 export const DRY_RUN: SettingDef = {

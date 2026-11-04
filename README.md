@@ -45,7 +45,7 @@ After that, add your keys and turn dry run off. Double-clicking `start-doodle.cm
 
 To update later, run `git pull` and then `npm run setup`. Your `data/` folder and `.env.local` are kept.
 
-Optional CLI backends (Settings → text via Claude Code, images via Codex):
+Optional CLI backends (Settings → text via Claude Code or Codex, images via Codex). No Claude plan? Pick **Codex (my ChatGPT plan)** under Anthropic and all text is written by Codex instead:
 - Claude Code: install the native build (`irm https://claude.ai/install.ps1 | iex`), which gives `claude.exe`. The npm `claude.cmd` shim can't take the multi-line system prompt through cmd.exe.
 - Codex: `npm i -g @openai/codex`, then `codex login`.
 If the app can't find a CLI, set its path on the Settings page.

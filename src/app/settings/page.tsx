@@ -96,17 +96,28 @@ function SourceBadge({ s }: { s: PublicSetting }) {
   return <Badge>Default</Badge>;
 }
 
+/** Which subscription CLI does the work: Claude Code for text, Codex for text or images. */
+type CliUse = "claude" | "codex-text" | "codex-image";
+type CliOption = { value: string; use: CliUse; label: string };
+
 /** Keys that can be replaced by a subscription CLI. */
-const BACKEND_FOR: Partial<Record<SettingKey, { key: SettingKey; cliValue: string; which: "claude" | "codex"; cliLabel: string }>> = {
-  ANTHROPIC_API_KEY: { key: "CLAUDE_BACKEND", cliValue: "cli", which: "claude", cliLabel: "Claude Code (my plan)" },
-  OPENAI_API_KEY: { key: "IMAGE_BACKEND", cliValue: "codex", which: "codex", cliLabel: "Codex (my ChatGPT plan)" },
+const BACKEND_FOR: Partial<Record<SettingKey, { key: SettingKey; clis: CliOption[] }>> = {
+  ANTHROPIC_API_KEY: {
+    key: "CLAUDE_BACKEND",
+    clis: [
+      { value: "cli", use: "claude", label: "Claude Code (my plan)" },
+      { value: "codex", use: "codex-text", label: "Codex (my ChatGPT plan)" },
+    ],
+  },
+  OPENAI_API_KEY: { key: "IMAGE_BACKEND", clis: [{ value: "codex", use: "codex-image", label: "Codex (my ChatGPT plan)" }] },
 };
 
-type Backend = { key: SettingKey; cliValue: string; which: "claude" | "codex"; cliLabel: string; setting: PublicSetting };
+type Backend = { key: SettingKey; clis: CliOption[]; setting: PublicSetting };
 
 function KeyRow({ def, setting, backend }: { def: SettingDef; setting: PublicSetting; backend?: Backend }) {
   const save = useSave();
-  const useCli = backend?.setting?.value === backend?.cliValue;
+  const activeCli = backend?.clis.find((c) => c.value === backend.setting?.value);
+  const useCli = Boolean(activeCli);
   const [draft, setDraft] = useState("");
   const [show, setShow] = useState(false);
   const [editing, setEditing] = useState(!setting.isSet);
@@ -127,7 +138,7 @@ function KeyRow({ def, setting, backend }: { def: SettingDef; setting: PublicSet
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
             <span className="font-medium">{def.label}</span>
-            <SourceBadge s={setting} />
+            {useCli ? null : <SourceBadge s={setting} />}
           </div>
           <p className="mt-0.5 text-[13px] text-stone-600">{def.help}</p>
         </div>
@@ -139,11 +150,8 @@ function KeyRow({ def, setting, backend }: { def: SettingDef; setting: PublicSet
       </div>
 
       {backend ? (
-        <div role="radiogroup" aria-label={`${def.label} connection`} className="mt-3 inline-flex rounded-lg bg-stone-200/70 p-1">
-          {[
-            { v: "api", label: "API key" },
-            { v: backend.cliValue, label: backend.cliLabel },
-          ].map((o) => (
+        <div role="radiogroup" aria-label={`${def.label} connection`} className="mt-3 inline-flex flex-wrap rounded-lg bg-stone-200/70 p-1">
+          {[{ v: "api", label: "API key" }, ...backend.clis.map((c) => ({ v: c.value, label: c.label }))].map((o) => (
             <button
               key={o.v}
               role="radio"
@@ -161,8 +169,8 @@ function KeyRow({ def, setting, backend }: { def: SettingDef; setting: PublicSet
         </div>
       ) : null}
 
-      {useCli && backend ? (
-        <CliPanel which={backend.which} />
+      {activeCli ? (
+        <CliPanel use={activeCli.use} />
       ) : editing ? (
         <form
           className="mt-3 flex flex-wrap gap-2"
@@ -321,6 +329,11 @@ function ClaudeModelsCard({ byKey }: { byKey: Map<SettingKey, PublicSetting> }) 
 
   return (
     <Card className="p-4">
+      {byKey.get("CLAUDE_BACKEND")?.value === "codex" ? (
+        <p className="mb-3 rounded-lg bg-amber-50 px-3 py-2 text-[13px] text-amber-900 ring-1 ring-amber-200">
+          Text is written by Codex right now, so these Claude models aren&apos;t used. They apply again if you switch back to API key or Claude Code.
+        </p>
+      ) : null}
       <p className="mb-3 text-[13px] text-stone-600">
         Which Claude model writes each step. Estimates are for one ~2,000-word video; the <b>Spent</b> meter on each video shows the real cost.
         Prices are $ per million input / output tokens.
@@ -397,15 +410,39 @@ function ClaudeModelsCard({ byKey }: { byKey: Map<SettingKey, PublicSetting> }) 
 
 type CliStatus = { found: boolean; path: string | null; version: string | null; loggedIn: boolean | null; detail: string };
 
+const CLI_INFO: Record<CliUse, { which: "claude" | "codex"; test: string; testLabel: string; confirm?: string; note: string }> = {
+  claude: {
+    which: "claude",
+    test: "CLAUDE_CLI",
+    testLabel: "Test (1 short message)",
+    note: "Uses your Claude plan's usage limits instead of per-token billing. Model presets below still apply.",
+  },
+  "codex-text": {
+    which: "codex",
+    test: "CODEX_TEXT",
+    testLabel: "Test (1 short message)",
+    note: "Writes ideas, scripts, scenes and titles with Codex on your ChatGPT plan, for when you have no Claude plan. The Claude model presets below don't apply. Script text appears when it's finished instead of streaming.",
+  },
+  "codex-image": {
+    which: "codex",
+    test: "CODEX_IMAGE",
+    testLabel: "Test (draws 1 image)",
+    confirm: "This draws one small test image using your ChatGPT plan (about 1–2 minutes). Continue?",
+    note: "Uses your ChatGPT plan's image limits. About 1–2 minutes per image; set Parallel image requests to 1–2 below. Draft/final quality becomes a simpler or more polished drawing.",
+  },
+};
+
 /** Status + test for a subscription CLI (Claude Code or Codex). */
-function CliPanel({ which }: { which: "claude" | "codex" }) {
+function CliPanel({ use }: { use: CliUse }) {
+  const info = CLI_INFO[use];
+  const { which } = info;
   const status = useQuery({
     queryKey: ["cli-status"],
     queryFn: () => api<{ claude: CliStatus; codex: CliStatus }>("/api/settings/cli"),
     staleTime: 30_000,
   });
   const test = useMutation({
-    mutationFn: () => api<TestResult>("/api/settings/test", { json: { provider: which === "claude" ? "CLAUDE_CLI" : "CODEX_IMAGE" } }),
+    mutationFn: () => api<TestResult>("/api/settings/test", { json: { provider: info.test } }),
   });
   const s = status.data?.[which];
   const name = which === "claude" ? "Claude Code" : "Codex";
@@ -427,6 +464,8 @@ function CliPanel({ which }: { which: "claude" | "codex" }) {
           {s.detail ? <div className="mt-0.5 text-stone-600">{s.detail}</div> : null}
         </div>
       ) : null}
+      <CliTextSetting settingKey={which === "claude" ? "CLAUDE_CLI_PATH" : "CODEX_CLI_PATH"} label="CLI path" placeholder="Auto-detect" onSaved={() => status.refetch()} />
+      {use === "codex-text" ? <CliTextSetting settingKey="CODEX_TEXT_MODEL" label="Model" placeholder="Codex default" /> : null}
       <div className="flex flex-wrap items-center gap-2">
         <Button
           size="sm"
@@ -434,11 +473,11 @@ function CliPanel({ which }: { which: "claude" | "codex" }) {
           loading={test.isPending}
           disabled={!s?.found}
           onClick={() => {
-            if (which === "codex" && !confirm("This draws one small test image using your ChatGPT plan (about 1–2 minutes). Continue?")) return;
+            if (info.confirm && !confirm(info.confirm)) return;
             test.mutate();
           }}
         >
-          {which === "claude" ? "Test (1 short message)" : "Test (draws 1 image)"}
+          {info.testLabel}
         </Button>
         <Button size="sm" variant="ghost" onClick={() => status.refetch()} loading={status.isFetching && !status.isLoading}>
           Re-check
@@ -451,12 +490,45 @@ function CliPanel({ which }: { which: "claude" | "codex" }) {
         </div>
       ) : null}
       <ErrorNote error={test.error} />
-      <p className="text-xs text-stone-500">
-        {which === "claude"
-          ? "Uses your Claude plan's usage limits instead of per-token billing. Model presets below still apply."
-          : "Uses your ChatGPT plan's image limits. About 1–2 minutes per image; set Parallel image requests to 1–2 below. Draft/final quality becomes a simpler or more polished drawing."}{" "}
-        Personal use only.
-      </p>
+      <p className="text-xs text-stone-500">{info.note} Personal use only.</p>
     </div>
+  );
+}
+
+/** Small inline text setting (CLI path, Codex model); empty means auto-detect / default. */
+function CliTextSetting({ settingKey, label, placeholder, onSaved }: { settingKey: SettingKey; label: string; placeholder: string; onSaved?: () => void }) {
+  const { data } = useSettings();
+  const save = useSave();
+  const value = data?.settings.find((x) => x.key === settingKey)?.value ?? "";
+  const [draft, setDraft] = useState<string | null>(null);
+  const dirty = draft !== null && draft.trim() !== value;
+  return (
+    <form
+      className="flex flex-wrap items-center gap-2"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        await save.mutateAsync({ [settingKey]: draft?.trim() || null });
+        setDraft(null);
+        onSaved?.();
+      }}
+    >
+      <label htmlFor={settingKey} className="w-20 text-[13px] text-stone-600">
+        {label}
+      </label>
+      <Input
+        id={settingKey}
+        value={draft ?? value}
+        onChange={(e) => setDraft(e.target.value)}
+        placeholder={placeholder}
+        spellCheck={false}
+        className="h-8 min-w-[200px] flex-1 font-mono text-[12px]"
+      />
+      {dirty ? (
+        <Button type="submit" size="sm" variant="secondary" loading={save.isPending}>
+          Save
+        </Button>
+      ) : null}
+      <ErrorNote error={save.error} />
+    </form>
   );
 }
