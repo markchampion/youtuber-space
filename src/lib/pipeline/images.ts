@@ -3,6 +3,7 @@ import fs from "node:fs";
 import path from "node:path";
 import { eq, inArray } from "drizzle-orm";
 import { nanoid } from "nanoid";
+import sharp from "sharp";
 import { db, schema } from "@/lib/db";
 import { characterSheetPrompt, needsImage } from "@/lib/ai/prompts/image";
 import { imageProvider, to1080p, toFrame, type ImageQuality } from "@/lib/image/provider";
@@ -39,6 +40,21 @@ export async function generateCharacterCandidates(channelId: string, count = 2) 
     ),
   );
   return out;
+}
+
+/** Save the user's own character image as an option and make it the active reference. */
+export async function uploadCharacterRef(channelId: string, data: Buffer) {
+  const png = await sharp(data)
+    .rotate() // honour EXIF orientation from phone photos
+    .resize({ width: 2048, height: 2048, fit: "inside", withoutEnlargement: true })
+    .png()
+    .toBuffer()
+    .catch(() => {
+      throw new Error("That file isn't an image we can read. Try a PNG, JPG or WebP.");
+    });
+  const rel = writeMedia(path.posix.join("channels", channelId, `character_${Date.now()}_upload.png`), png);
+  setCharacterRef(channelId, rel);
+  return rel;
 }
 
 export function setCharacterRef(channelId: string, rel: string | null) {

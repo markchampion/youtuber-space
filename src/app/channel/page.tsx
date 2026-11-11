@@ -1,9 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, Plus, Sparkles, Trash2, UserRound } from "lucide-react";
+import { Check, ImageUp, Plus, Sparkles, Trash2, UserRound } from "lucide-react";
 import { api, useChannel } from "@/lib/client";
 import type { ChannelProfile } from "@/lib/channel";
 import { ProfileEditor } from "@/components/profile-editor";
@@ -117,6 +117,15 @@ function CharacterSection() {
     mutationFn: (rel: string | null) => api("/api/channel", { method: "PUT", json: { characterRefPath: rel } }),
     onSuccess: () => qc.invalidateQueries({ queryKey: ["channel"] }),
   });
+  const fileRef = useRef<HTMLInputElement>(null);
+  const upload = useMutation({
+    mutationFn: async (file: File) => {
+      const fd = new FormData();
+      fd.append("file", file);
+      return api("/api/channel/character", { method: "POST", body: fd });
+    },
+    onSuccess: () => qc.invalidateQueries({ queryKey: ["channel"] }),
+  });
   if (!data) return null;
   const current = data.channel.characterRefPath;
 
@@ -126,14 +135,30 @@ function CharacterSection() {
         <div>
           <h2 className="font-semibold">Character reference</h2>
           <p className="mt-0.5 max-w-xl text-sm text-stone-600">
-            Generate a few character sheets and pick the best one. It&apos;s sent as a reference with every scene image, which keeps the character looking the same from frame to frame.
+            Upload your own character art, or generate a few character sheets and pick the best one. It&apos;s sent as a reference with every scene image, which keeps the character looking the same from frame to frame.
           </p>
         </div>
-        <Button variant="primary" icon={<Sparkles className="size-4" />} loading={gen.isPending} onClick={() => gen.mutate()}>
-          Generate 2 options
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button icon={<ImageUp className="size-4" />} loading={upload.isPending} onClick={() => fileRef.current?.click()}>
+            Upload my own
+          </Button>
+          <Button variant="primary" icon={<Sparkles className="size-4" />} loading={gen.isPending} onClick={() => gen.mutate()}>
+            Generate 2 options
+          </Button>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            className="hidden"
+            onChange={(e) => {
+              const f = e.target.files?.[0];
+              if (f) upload.mutate(f);
+              e.target.value = "";
+            }}
+          />
+        </div>
       </div>
-      <ErrorNote error={gen.error ?? pick.error} />
+      <ErrorNote error={gen.error ?? upload.error ?? pick.error} />
       {!data.candidates.length ? (
         <div className="flex items-center gap-3 rounded-lg bg-stone-50 p-4 text-sm text-stone-600">
           <UserRound className="size-5 text-stone-400" /> No character sheets yet.
@@ -149,7 +174,7 @@ function CharacterSection() {
                 className={cn("relative overflow-hidden rounded-lg ring-1 ring-stone-200 transition-shadow hover:shadow-md", active && "ring-4 ring-emerald-500")}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={c.url} alt="Character sheet option" className="aspect-video w-full object-cover" />
+                <img src={c.url} alt="Character sheet option" className="aspect-video w-full bg-stone-50 object-contain" />
                 {active ? (
                   <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-xs font-medium text-white">
                     <Check className="size-3" /> In use
