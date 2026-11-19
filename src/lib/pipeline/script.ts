@@ -4,10 +4,12 @@ import { nanoid } from "nanoid";
 import { db, schema } from "@/lib/db";
 import { env } from "@/lib/env";
 import { claudeJSON, claudeText } from "@/lib/ai/claude";
-import { channelBrief, factCheckPrompt, outlinePrompt, polishPrompt, rewriteParagraphPrompt, scriptPrompt, shortenPrompt, templateOf, trimPrompt } from "@/lib/ai/prompts";
-import { OUTLINE_TEMPLATES } from "@/lib/outline-templates";
+import { channelBrief, continuityPrompt, factCheckPrompt, outlinePrompt, polishPrompt, rewriteParagraphPrompt, scriptChapterPrompt, scriptPrompt, shortenPrompt, templateOf, trimPrompt, type ChapterCount } from "@/lib/ai/prompts";
+import { ALL_OUTLINE_TEMPLATES, chapterOfKey, expandDramaTemplate, isChapterTemplate } from "@/lib/outline-templates";
+import { joinChapters, splitChapters, type StoryChapter } from "@/lib/chapters";
 import type { ChannelProfile, OutlineTemplate } from "@/lib/channel";
-import { lengthBudget, needsTrim, polishEnabled } from "@/lib/channel";
+import { isDrama, lengthBudget, needsTrim, polishEnabled } from "@/lib/channel";
+import { spellOutNumbers } from "@/lib/spell-numbers";
 import { FactCheckSchema, OutlineSchema, type FactCheck, type Outline } from "@/lib/types";
 import { acceptPolish, splitParagraphs, splitSentences, wordCount } from "@/lib/sync";
 import { getVersion, recordVersion, snapshotCurrent } from "./history";
@@ -43,19 +45,21 @@ Tomorrow morning, an alarm will pull you out of sleep. You wake up when the alar
 export function resolveTemplate(profile: ChannelProfile, name?: string | null): OutlineTemplate {
   const own = templateOf(profile);
   if (!name || name === own.name) return own;
-  return OUTLINE_TEMPLATES.find((t) => t.name === name) ?? own;
+  return ALL_OUTLINE_TEMPLATES.find((t) => t.name === name) ?? own;
 }
 
-export async function generateOutline(projectId: string, templateName?: string | null) {
+export async function generateOutline(projectId: string, templateName?: string | null, chapters: ChapterCount = "auto") {
   snapshotCurrent(projectId, "outline"); // keep what's there before the AI replaces it
   const p = getProject(projectId);
   const channel = getChannel(p.channelId);
   const template = resolveTemplate(channel.profile, templateName);
   const outline = env.dryRun
-    ? DRY_OUTLINE
+    ? isDrama(channel.profile) && isChapterTemplate(template)
+      ? dryStoryOutline(template, chapters === "auto" ? 3 : chapters)
+      : DRY_OUTLINE
     : await claudeJSON(OutlineSchema, {
         system: channelBrief(channel.profile),
-        user: outlinePrompt(channel.profile, p.title, p.hook, template),
+        user: outlinePrompt(channel.profile, p.title, p.hook, template, chapters),
         effort: "high",
         kind: "outline",
         projectId,
@@ -70,12 +74,21 @@ export function saveOutline(projectId: string, outline: Outline, source: Version
   recordVersion(projectId, "outline", JSON.stringify(outline), source);
 }
 
-/** Streams the script; `onText` receives deltas. Saves when complete. */
-export async function generateScript(projectId: string, onText: (d: string) => void) {
+/** Streams the script; `onText` receives deltas. Saves when complete. `resume` continues a story whose chapters stopped part-way. */
+export async function generateScript(projectId: string, onText: (d: string) => void, opts: { resume?: boolean } = {}) {
   const p = getProject(projectId);
   if (!p.outline) throw new Error("Generate or write an outline first");
-  snapshotCurrent(projectId, "script"); // keep the previous script before the AI replaces it
   const channel = getChannel(p.channelId);
+  // Drama story projects: the whole story, chapter by chapter. Chapter videos: rewrite just their chapter.
+  if (isDrama(channel.profile) && !p.parentId && outlineChapters(p.outline).length) {
+    if (!opts.resume) snapshotCurrent(projectId, "script");
+    return writeStory(projectId, onText, opts.resume ?? false);
+  }
+  if (isDrama(channel.profile) && p.parentId && p.chapter) {
+    snapshotCurrent(projectId, "script");
+    return rewriteChapterVideo(projectId, onText);
+  }
+  snapshotCurrent(projectId, "script"); // keep the previous script before the AI replaces it
   let script: string;
   if (env.dryRun) {
     for (const word of DRY_SCRIPT.split(/(?<=\s)/)) {
@@ -94,6 +107,8 @@ export async function generateScript(projectId: string, onText: (d: string) => v
       onText,
     });
   }
+  // Drama scripts are read by TTS: any digits the model slipped in become words (captions then match the voice).
+  if (isDrama(channel.profile)) script = spellOutNumbers(script, channel.profile.language);
   saveScript(projectId, script, "ai");
   if (polishEnabled(channel.profile)) {
     // Tell the client a second pass is starting; it replaces the text it shows.
@@ -106,6 +121,125 @@ export async function generateScript(projectId: string, onText: (d: string) => v
     script = (await rewriteWholeScript(projectId, "trim", onText)).script;
   }
   return script;
+}
+
+/** Chapter numbers found in an outline's section keys (c1_…, c2_…), in order. Empty when the outline has no chapters. */
+export function outlineChapters(outline: Outline): number[] {
+  const nums = outline.sections.map((s) => chapterOfKey(s.key)).filter((n): n is number => n != null);
+  return [...new Set(nums)].sort((a, b) => a - b);
+}
+
+/** In-band stream marker before each chapter of a story (`phase` = "polish" / "trim" while a chapter is being reworked). */
+export function chapterMarker(n: number, count: number, phase?: "polish" | "trim") {
+  return `\n[[CHAPTER ${n}/${count}${phase ? ` ${phase}` : ""}]]\n`;
+}
+
+/** Titles of a story outline's chapters, by number. */
+function chapterTitle(outline: Outline, n: number) {
+  return outline.chapters?.find((c) => c.n === n)?.title ?? "";
+}
+
+/**
+ * Write a whole story, one AI call per chapter. Each call sees the outline, the story bible and every chapter before it.
+ * The story is saved after every chapter (with "## Chương n: title" markers), so a failure keeps what was written and
+ * `resume` continues from the first missing chapter.
+ */
+async function writeStory(projectId: string, onText: (d: string) => void, resume: boolean) {
+  const p = getProject(projectId);
+  const outline = p.outline!;
+  const profile = getChannel(p.channelId).profile;
+  const lang = profile.language;
+  const planned = outlineChapters(outline);
+  const done: StoryChapter[] = resume ? splitChapters(p.script).filter((c) => planned.includes(c.n) && c.text.trim()) : [];
+  const todo = planned.filter((n) => !done.some((c) => c.n === n));
+  const save = () => saveScript(projectId, joinChapters([...done].sort((a, b) => a.n - b.n), lang), "ai", `${done.length}/${planned.length} chapters`);
+
+  for (const n of todo) {
+    const pos = planned.indexOf(n) + 1;
+    onText(chapterMarker(pos, planned.length));
+    const previous = done
+      .filter((c) => c.n < n)
+      .map((c) => c.text)
+      .join("\n\n");
+    let text = await writeChapter(projectId, profile, p.title, outline, n, planned.length, previous, onText);
+    text = await reworkChapter(projectId, profile, text, () => onText(chapterMarker(pos, planned.length, "polish")), () => onText(chapterMarker(pos, planned.length, "trim")));
+    done.push({ n, title: chapterTitle(outline, n), text });
+    save();
+  }
+  return getProject(projectId).script ?? "";
+}
+
+async function writeChapter(projectId: string, profile: ChannelProfile, title: string, outline: Outline, n: number, count: number, previous: string, onText: (d: string) => void) {
+  if (env.dryRun) {
+    const text = dryChapter(n, count);
+    for (const word of text.split(/(?<=\s)/)) {
+      onText(word);
+      await new Promise((r) => setTimeout(r, 4));
+    }
+    return text;
+  }
+  return claudeText({
+    system: channelBrief(profile),
+    user: scriptChapterPrompt(profile, title, outline, n, count, previous),
+    effort: "high",
+    maxTokens: 32000,
+    kind: "script",
+    projectId,
+    onText,
+  });
+}
+
+/** Per-chapter clean-up: digits to words, the natural-speech pass, and a trim when the chapter runs long. */
+async function reworkChapter(projectId: string, profile: ChannelProfile, text: string, onPolish: () => void, onTrim: () => void) {
+  let out = spellOutNumbers(text.trim(), profile.language);
+  if (env.dryRun) return out;
+  if (polishEnabled(profile)) {
+    onPolish();
+    const polished = await claudeText({ system: channelBrief(profile), user: polishPrompt(profile, out), effort: "high", maxTokens: 32000, kind: "polish", projectId });
+    if (acceptPolish(out, polished)) out = spellOutNumbers(polished.trim(), profile.language);
+  }
+  const words = wordCount(out, profile.language);
+  if (needsTrim(words, lengthBudget(profile))) {
+    onTrim();
+    const trimmed = await claudeText({ system: channelBrief(profile), user: trimPrompt(profile, out, words), effort: "medium", maxTokens: 32000, kind: "polish", projectId });
+    if (splitParagraphs(trimmed).length) out = trimmed.trim();
+  }
+  return out;
+}
+
+/** A chapter video's "Write script": rewrite its chapter from the story's outline, with the story's earlier chapters as context. */
+async function rewriteChapterVideo(projectId: string, onText: (d: string) => void) {
+  const p = getProject(projectId);
+  const story = getProject(p.parentId!);
+  const outline = story.outline ?? p.outline!;
+  const profile = getChannel(p.channelId).profile;
+  const planned = outlineChapters(outline);
+  const previous = splitChapters(story.script)
+    .filter((c) => c.n < p.chapter!)
+    .map((c) => c.text)
+    .join("\n\n");
+  let text = await writeChapter(projectId, profile, story.title, outline, p.chapter!, planned.length || p.chapter!, previous, onText);
+  text = await reworkChapter(projectId, profile, text, () => onText(POLISH_MARKER), () => undefined);
+  saveScript(projectId, text, "ai");
+  return text;
+}
+
+/** Dry-run outline for a drama story: the chapter template expanded, with placeholder beats. */
+function dryStoryOutline(template: OutlineTemplate, count: number): Outline {
+  const t = expandDramaTemplate(template, count);
+  return {
+    sections: t.beats.map((b) => ({ key: b.key, title: b.name, beats: [`(dry run) ${b.purpose}`] })),
+    evidence: ["Trần Văn Lộc – bảy mươi sáu tuổi – giáo viên về hưu – Hà Đông", "Phạm Thị Hiền – bảy mươi ba tuổi – thợ may – Hà Đông"],
+    chapters: Array.from({ length: Math.max(1, count) }, (_, i) => ({ n: i + 1, title: `Phần thử ${i + 1}`, summary: "(dry run)" })),
+  };
+}
+
+function dryChapter(n: number, count: number) {
+  return `${n === 1 ? "Rầm! Bố mẹ dọn xuống gầm cầu thang mà ngủ." : `Choang! Ở phần trước, cả nhà vừa trải qua một đêm dài. Đây là phần ${n}.`}
+
+Thưa quý cô bác, đây là đoạn chữ thử của chương ${n} trên ${count}. Ông Lộc ngồi lặng bên bàn, tay cầm cuốn sổ bìa nâu.
+
+${n === count ? "Kính chúc quý cô bác luôn mạnh khỏe. Hẹn gặp lại trong câu chuyện sau." : `Quý cô bác nhớ đăng ký kênh để nghe phần ${n + 1} nhé. Họ không hề biết rằng, ngày mai mọi chuyện sẽ đổi khác.`}`;
 }
 
 /** Stream marker between the first draft and the natural-speech pass. */
@@ -194,6 +328,7 @@ export async function rewriteParagraph(projectId: string, paragraph: string, ins
 export async function factCheck(projectId: string) {
   const p = getProject(projectId);
   if (!p.script) throw new Error("No script yet");
+  const drama = isDrama(getChannel(p.channelId).profile);
   const checks: FactCheck[] = env.dryRun
     ? [
         { name: "Richard Lee", claim: "Lived with the Ju/'hoansi in the 1960s", confidence: "high", note: "Well documented." },
@@ -201,8 +336,8 @@ export async function factCheck(projectId: string) {
       ]
     : (
         await claudeJSON(FactCheckSchema, {
-          system: "You are a meticulous fact-checker for educational history videos.",
-          user: factCheckPrompt(p.script),
+          system: drama ? "You are a meticulous continuity editor for long narrated fiction." : "You are a meticulous fact-checker for educational history videos.",
+          user: drama ? continuityPrompt(p.script, p.outline?.evidence ?? []) : factCheckPrompt(p.script),
           effort: "high",
           kind: "fact_check",
           projectId,

@@ -3,6 +3,7 @@ import { POLISH_MARKER, generateScript, rewriteWholeScript } from "@/lib/pipelin
 /**
  * Streams the script as plain text while Claude writes it. `?mode=polish` streams only the
  * natural-speech pass over the current script, `?mode=shorten` / `?mode=trim` the other rewrites. The polish phase always starts with POLISH_MARKER.
+ * Drama stories send a chapter marker (see chapterMarker) before each chapter; `?mode=continue` resumes a story from its first missing chapter.
  */
 export async function POST(req: Request, ctx: RouteContext<"/api/projects/[id]/script-stream">) {
   const { id } = await ctx.params;
@@ -17,7 +18,7 @@ export async function POST(req: Request, ctx: RouteContext<"/api/projects/[id]/s
           send(POLISH_MARKER);
           await rewriteWholeScript(id, rewriteMode, send);
         } else {
-          await generateScript(id, send);
+          await generateScript(id, send, { resume: mode === "continue" });
         }
       } catch (e) {
         // A sentinel the client recognises; the saved script is reloaded client-side.

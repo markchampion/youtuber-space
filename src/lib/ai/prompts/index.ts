@@ -1,5 +1,5 @@
-import { lengthBudget, pacingOf, type ChannelProfile, type OutlineTemplate, type TopicAngle } from "@/lib/channel";
-import { DEFAULT_OUTLINE_TEMPLATE } from "@/lib/outline-templates";
+import { genreOf, isDrama, lengthBudget, pacingOf, type ChannelProfile, type OutlineTemplate, type TopicAngle } from "@/lib/channel";
+import { beatOfKey, beatsOfRole, chapterOfKey, defaultTemplateFor, expandDramaTemplate, isChapterTemplate } from "@/lib/outline-templates";
 import { GENERIC_SPEECH_GUIDE, getLanguage } from "@/lib/languages";
 import type { Outline } from "@/lib/types";
 
@@ -8,14 +8,15 @@ const list = (xs: string[]) => xs.map((x) => `- ${x}`).join("\n");
 export function channelBrief(p: ChannelProfile): string {
   const b = lengthBudget(p);
   const opening = templateOf(p).beats[0];
-  return `You are the creative engine for a viral educational YouTube channel.
+  const drama = isDrama(p);
+  return `${drama ? "You are the head writer for a YouTube channel of narrated original fiction: long family-drama stories told by one narrator, listened to like an audio drama." : "You are the creative engine for a viral educational YouTube channel."}
 
 <channel>
 Niche: ${p.niche}
 Format: ${p.format}
 Video length: ${fmtRange(b.minMinutes, b.maxMinutes)} (about ${b.minWords}–${b.maxWords} words of narration)
 Voice: ${p.voice}
-${opening ? `Opening: ${opening.purpose}${opening.guidance ? ` ${opening.guidance}` : ""}\n` : ""}Evidence rule: ${p.evidenceRule}
+${opening ? `Opening: ${opening.purpose}${opening.guidance ? ` ${opening.guidance}` : ""}\n` : ""}${drama ? "Story rule" : "Evidence rule"}: ${p.evidenceRule}
 Other rules:
 ${list(p.extraScriptRules)}
 
@@ -34,7 +35,7 @@ Match the voice sample's register, rhythm, slang and way of addressing the viewe
 `
     : ""
 }
-${languageRule(p)} Only ever cite real, verifiable people, studies and sources — never invent a name, date or statistic.`;
+${languageRule(p)} ${drama ? FICTION_RULE : "Only ever cite real, verifiable people, studies and sources — never invent a name, date or statistic."}`;
 }
 
 /**
@@ -97,19 +98,45 @@ export const CASUAL_RULES = `Write for casual viewers, not students:
 - Talk to the viewer: ask them to guess, imagine or admit what they believe. Open a question every 20–40 seconds and pay it off later.
 - Each section should end by opening the next question, so there's always a reason to keep watching.`;
 
+/** Drama channels: the stories are invented, so the "never invent" rule is replaced by this. */
+export const FICTION_RULE =
+  "Every story is original fiction. Invent specific characters (full name, age, job, hometown), places and money figures, and keep them consistent. Never use real private people, never retell a real news case, and never copy another channel's story.";
+
+/** Replaces CASUAL_RULES for drama channels: how a narrated family drama keeps people listening for 30+ minutes. */
+export const DRAMA_RULES = `Write a narrated drama, not an explainer:
+- Third person, past tense, told by one warm narrator who sometimes addresses the audience directly with the channel's form of address. Never "you" as the protagonist.
+- About two thirds dialogue. Write dialogue inline without quotation marks, dashes or speaker labels; make the speaker clear from the sentence before it or from how they address each other (Bố ơi…, Anh Đức…). Each spoken line is its own sentence or short paragraph.
+- Concrete over abstract: exact names, ages, jobs, streets, markets, years and money amounts; one sensory detail per scene (rain on a tin roof, a ticking clock, a smell from the kitchen).
+- Sound words at moments of shock, on their own: Rầm! Choang! Cạch. Bốp!
+- Every chapter opens cold on dialogue in the middle of a scene and ends on a forward hook (Họ không hề biết rằng…).
+- Escalate steadily: each scene makes things worse or reveals something, until the reversal. Antagonists get a human reason; the ending restores dignity, not revenge.
+- State the moral plainly at the end, in short numbered lessons, including one practical lesson the audience can use.
+- Write every number, amount, age, year and time as words, never digits (bảy mươi sáu tuổi, một tỷ hai trăm triệu, năm một nghìn chín trăm tám mươi ba), because the script is read by a text-to-speech voice.
+- No headers, chapter titles, markdown, brackets or stage directions in the narration.`;
+
 export function templateOf(p: ChannelProfile): OutlineTemplate {
-  return p.outlineTemplate?.beats?.length ? p.outlineTemplate : DEFAULT_OUTLINE_TEMPLATE;
+  return p.outlineTemplate?.beats?.length ? p.outlineTemplate : defaultTemplateFor(genreOf(p));
 }
+
+/** Rules block for outlines and scripts, by genre. */
+export const styleRules = (p: ChannelProfile) => (isDrama(p) ? DRAMA_RULES : CASUAL_RULES);
 
 /** Word and time budget for each part of the structure, scaled to the channel's target length. */
 export function beatBudgets(p: ChannelProfile, template: OutlineTemplate = templateOf(p)) {
   const b = lengthBudget(p);
-  const total = template.beats.reduce((a, x) => a + x.share, 0) || 1;
+  // Chapter templates: every chapter is its own video, so the channel length is split within each chapter (or role group).
+  const group = (x: OutlineTemplate["beats"][number]) => (isChapterTemplate(template) ? String(chapterOfKey(x.key) ?? x.role ?? "middle") : "all");
+  const totals = new Map<string, number>();
+  for (const x of template.beats) totals.set(group(x), (totals.get(group(x)) ?? 0) + x.share);
   return template.beats.map((beat) => {
-    const words = Math.max(5, Math.round((b.targetWords * beat.share) / total));
+    const words = Math.max(5, Math.round((b.targetWords * beat.share) / (totals.get(group(beat)) || 1)));
     return { beat, words, secs: Math.round((words / b.wpm) * 60) };
   });
 }
+
+/** How many chapters a drama outline should have: a fixed number, or "auto" (the AI decides from the story). */
+export type ChapterCount = number | "auto";
+export const AUTO_CHAPTERS = { min: 3, max: 10 };
 
 /** How long the video may be, in words and spoken minutes. */
 export function lengthLine(p: ChannelProfile) {
@@ -126,7 +153,8 @@ function fmtMinutes(m: number) {
   return secs < 120 ? `${secs} seconds` : `${Math.round(m * 10) / 10} minutes`;
 }
 
-export function outlinePrompt(p: ChannelProfile, title: string, hook?: string | null, template: OutlineTemplate = templateOf(p)) {
+export function outlinePrompt(p: ChannelProfile, title: string, hook?: string | null, template: OutlineTemplate = templateOf(p), chapters: ChapterCount = "auto") {
+  if (isDrama(p) && isChapterTemplate(template)) return storyOutlinePrompt(p, title, hook, template, chapters);
   const budget = lengthBudget(p);
   const beats = beatBudgets(p, template)
     .map(({ beat: b, words, secs }, i) => `${i + 1}. key="${b.key}", ${b.name} (~${words} words, ~${secs}s): ${b.purpose}${b.guidance ? ` Guidance: ${b.guidance}` : ""}`)
@@ -139,11 +167,58 @@ ${beats}
 </structure>
 
 For each section: title = a readable label in the channel language; 2–6 beats = what the narrator actually says there, already in the channel voice and spoken style, as short, picturable lines. Put any direction, delivery tip or fact-check warning in that section's "notes" (English), never in the beats.
-List the real, named sources the script should cite in "evidence" (follow the evidence rule), only ones you're certain are real.
+${isDrama(p) ? STORY_BIBLE_RULE : `List the real, named sources the script should cite in "evidence" (follow the evidence rule), only ones you're certain are real.`}
 
 Length: the whole video must fit in about ${budget.targetWords} words (${fmtMinutes(budget.maxMinutes)} at most). Beats are short notes of what gets said, not the finished script: plan only as much material as fits each part's word budget.
+Leave "chapters" empty.
 
-${CASUAL_RULES}`;
+${styleRules(p)}`;
+}
+
+const STORY_BIBLE_RULE = `Use "evidence" as the story bible: one line per fixed fact every chapter must respect, e.g. each character as "Full name – age – role/job – where they live – one trait", key places, key objects, money amounts (in words) and dates. Include every named character.`;
+
+/**
+ * Outline for a drama told in chapters. Each chapter becomes its own video of the channel's length, so the story has as many
+ * chapters as its plot needs: a fixed number, or chosen by the AI ("auto").
+ */
+function storyOutlinePrompt(p: ChannelProfile, title: string, hook: string | null | undefined, template: OutlineTemplate, chapters: ChapterCount) {
+  const b = lengthBudget(p);
+  const line = (x: { beat: OutlineTemplate["beats"][number]; words: number }, key: string) =>
+    `- key="${key}", ${x.beat.name} (~${x.words} words): ${x.beat.purpose}${x.beat.guidance ? ` Guidance: ${x.beat.guidance}` : ""}`;
+  let structure: string;
+  if (chapters === "auto") {
+    const budgets = beatBudgets(p, template);
+    const group = (role: "first" | "middle" | "last", prefix: string) =>
+      budgets.filter((x) => beatsOfRole(template, role).includes(x.beat)).map((x) => line(x, `${prefix}_${x.beat.key}`)).join("\n");
+    structure = `Decide how many chapters this story needs: between ${AUTO_CHAPTERS.min} and ${AUTO_CHAPTERS.max}. Use more chapters only when the plot has enough real turns to fill them; never pad.
+Chapter 1 has these sections:
+${group("first", "c1")}
+Every middle chapter k (2 up to N-1) has these sections, with k in the key:
+${group("middle", "ck")}
+The last chapter N has these sections, with N in the key:
+${group("last", "cN")}
+Replace k and N with the real chapter numbers (e.g. "c2_reveal", "c5_moral_cta").`;
+  } else {
+    const n = Math.max(1, Math.min(30, Math.round(chapters)));
+    const expanded = expandDramaTemplate(template, n);
+    structure = `The story has exactly ${n} chapter${n === 1 ? "" : "s"}. Exactly one section per step, in this order, using the given key:
+${beatBudgets(p, expanded)
+  .map((x) => line(x, x.beat.key))
+  .join("\n")}`;
+  }
+  return `Create the outline for a narrated drama titled "${title}".${hook ? ` Suggested opening: "${hook}"` : ""}
+
+Every chapter is published as its own video of about ${fmtMinutes(b.maxMinutes)} (~${b.targetWords} words), so each chapter needs its own cold open, its own rising tension and its own cliffhanger.
+<structure>
+${structure}
+</structure>
+
+For each section: title = a readable label in the channel language; 2–6 beats = what happens and what is said there, as short, concrete lines (who says what, which object, which amount). Put any direction or warning in that section's "notes" (English), never in the beats.
+In "chapters", list every chapter in order: n, a short gripping title in the channel language, and a one-line summary.
+${STORY_BIBLE_RULE}
+Plan the whole arc before writing beats: where the secret is planted, when it comes out, when the reversal happens. Every chapter must move the plot; no chapter may only repeat tension.
+
+${DRAMA_RULES}`;
 }
 
 /** Sentence-level rules shared by the script, polish and shorten prompts. */
@@ -161,7 +236,7 @@ export function scriptPrompt(p: ChannelProfile, title: string, outline: Outline)
 <outline>
 ${o}
 
-Evidence to weave in: ${outline.evidence.join("; ")}
+${isDrama(p) ? "Story bible (keep every fact exactly)" : "Evidence to weave in"}: ${outline.evidence.join("; ")}
 </outline>
 ${notes.length ? `\n<creator_notes>\nRespect these, but never say them out loud or let them change the voice:\n${list(notes)}\n</creator_notes>\n` : ""}
 Rules:
@@ -170,26 +245,72 @@ Rules:
     .join(", ")}. If the outline has more material than fits, cut the weakest beats, never the hook, the key reveal or the ending.
 - Pure narration as plain text. No title, no headers, no markdown, no brackets, no stage directions.
 - Separate paragraphs with a blank line. Keep paragraphs to 2–6 sentences — each paragraph is voiced separately.
-- Follow the channel voice, the structure of the outline, the other rules and the evidence rule.
+- Follow the channel voice, the structure of the outline, the other rules and the ${isDrama(p) ? "story" : "evidence"} rule.
 - It must sound like someone talking, not reading: follow the SPOKEN STYLE rules${p.voiceSample?.trim() ? " and the voice sample" : ""}.
 ${sentenceRules(p)}
 
-${CASUAL_RULES}
+${styleRules(p)}
 
 Output only the script.`;
+}
+
+/**
+ * Drama stories are written one chapter per call so long stories keep their facts straight: each call sees the whole
+ * outline, the story bible and every chapter written so far. Every chapter is published as its own video.
+ */
+export function scriptChapterPrompt(p: ChannelProfile, title: string, outline: Outline, chapter: number, chapterCount: number, previous: string) {
+  const info = (n: number) => outline.chapters?.find((c) => c.n === n);
+  const o = outline.sections
+    .map((s) => {
+      const ch = chapterOfKey(s.key);
+      return `${ch === chapter ? ">>> " : ""}[chapter ${ch ?? "?"}${ch && info(ch)?.title ? `: ${info(ch)!.title}` : ""}] ${s.title}:\n${list(s.beats)}`;
+    })
+    .join("\n\n");
+  const own = outline.sections.filter((s) => chapterOfKey(s.key) === chapter);
+  const notes = own.flatMap((s) => (s.notes ?? []).map((n) => `${s.title}: ${n}`));
+  const b = lengthBudget(p);
+  const template = templateOf(p);
+  const shares = own.map((s) => beatOfKey(template, s.key, chapterCount)?.share ?? 10);
+  const total = shares.reduce((a, x) => a + x, 0) || 1;
+  const parts = own.map((s, i) => `${s.title} ~${Math.round((b.targetWords * shares[i]) / total)}`);
+  const first = chapter === 1;
+  const last = chapter === chapterCount;
+  return `You are writing "${title}", a narrated drama in ${chapterCount} chapters. Every chapter is published as its own video. Write ONLY chapter ${chapter} of ${chapterCount}${info(chapter)?.title ? ` ("${info(chapter)!.title}")` : ""}: the sections marked >>> below.
+
+<outline>
+${o}
+
+Story bible (keep every fact exactly): ${outline.evidence.join("; ")}
+</outline>
+${previous.trim() ? `\n<story_so_far>\n${previous.trim()}\n</story_so_far>\nContinue from here. Never contradict it, never repeat its scenes, keep every name, age, place and amount the same.\n` : ""}${notes.length ? `\n<creator_notes>\nRespect these, but never say them out loud:\n${list(notes)}\n</creator_notes>\n` : ""}
+Rules:
+- Length: about ${b.targetWords} words for this chapter, at most ${b.maxWords} (${parts.join(", ")}).
+- ${first ? "Open cold on the shouted line of dialogue." : "Open cold on new dialogue in the middle of a scene. Right after that opening, the narrator gives a 1–2 sentence recap for listeners who missed the previous part (e.g. 'Ở phần trước, …'), then the story goes on."}
+- ${last ? "This is the last chapter: resolve everything, then the moral and the closing call to action." : `End with a short call to like, subscribe and wait for the next part (part ${chapter + 1}), then one forward hook line into it.`}
+- Pure narration as plain text. No chapter title, no headers, no markdown, no brackets, no stage directions.
+- Separate paragraphs with a blank line. Keep paragraphs to 1–6 sentences — each paragraph is voiced separately.
+- Follow the channel voice and the story rule${p.voiceSample?.trim() ? "; match the voice sample" : ""}.
+${sentenceRules(p)}
+
+${DRAMA_RULES}
+
+Output only the text of chapter ${chapter}.`;
 }
 
 /** Second pass: rewrite for natural spoken language without changing facts or structure. */
 export function polishPrompt(p: ChannelProfile, script: string) {
   const lang = getLanguage(p.language);
-  return `You are a native ${lang.name} script editor for YouTube narration. Rewrite this script so it sounds like a real ${lang.name} speaker talking to a friend on camera, in this channel's voice.
+  const who = isDrama(p)
+    ? `a warm ${lang.name} storyteller reading a family drama aloud on the radio, with natural dialogue for each character`
+    : `a real ${lang.name} speaker talking to a friend on camera`;
+  return `You are a native ${lang.name} script editor for YouTube narration. Rewrite this script so it sounds like ${who}, in this channel's voice.
 
 <script>
 ${script}
 </script>
 
 Rules:
-- Keep every fact, name, number, date and source exactly. Don't add new facts. Don't cut the jokes.
+- Keep every fact, name, number, date and source exactly. Don't add new facts. ${isDrama(p) ? "Keep every line of dialogue and every sound word; keep numbers written as words." : "Don't cut the jokes."}
 - Keep exactly the same paragraphs: same count, same order, separated by one blank line. You may rephrase and re-split sentences inside a paragraph.
 - Fix anything that sounds written, formal, stiff or translated from English. Prefer everyday words and natural spoken rhythm.
 - Don't make it longer: stay at or under ${lengthBudget(p).maxWords} words.
@@ -227,6 +348,22 @@ For each, state what the script claims, and your confidence that the name exists
 - medium: the name is real but the specific detail (year, number, finding) should be checked
 - low: you are unsure the source exists or the claim is likely wrong/garbled
 In "note", say precisely what to check or what's wrong.`;
+}
+
+/** Drama channels: instead of fact-checking real sources, check that the invented story is consistent with itself. */
+export function continuityPrompt(script: string, bible: string[]) {
+  return `You are the continuity editor for a long narrated drama. Check that the story is consistent with itself.
+
+${bible.length ? `<story_bible>\n${list(bible)}\n</story_bible>\n\n` : ""}<script>
+${script}
+</script>
+
+List every character, place, object, amount of money, age, date and time span the plot depends on. For each one:
+- name: the character, place, object or figure
+- claim: what the script says about it (quote the wording when it changes between places)
+- confidence: high = consistent everywhere; medium = vague or could confuse a listener; low = contradiction (different age, name, amount, relation or timeline in different places, or a plot hole)
+- note: where exactly it changes and how to fix it
+Also flag, as low, any number written in digits instead of words (the script is read by text-to-speech).`;
 }
 
 export function scenesPrompt(p: ChannelProfile, numbered: string, sentenceCount: number) {

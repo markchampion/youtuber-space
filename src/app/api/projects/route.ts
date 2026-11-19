@@ -5,7 +5,7 @@ import { mediaUrl } from "@/lib/media";
 import { projectCost } from "@/lib/costs";
 import { getActiveChannel, scenesOf } from "@/lib/pipeline/common";
 import { autopilotState } from "@/lib/pipeline/autopilot";
-import { channelKind } from "@/lib/channel";
+import { channelKind, isDrama } from "@/lib/channel";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +28,8 @@ export const GET = handler(async (req: Request) => {
       .filter((j) => j.projectId && j.type !== "autopilot")
       .map((j) => [j.projectId!, { type: j.type.split(":")[0], progress: j.progress, message: j.message }]),
   );
-  const channels = new Map(db.select().from(schema.channels).all().map((c) => [c.id, { name: c.name, kind: channelKind(c.profile) }]));
+  const channels = new Map(db.select().from(schema.channels).all().map((c) => [c.id, { name: c.name, kind: channelKind(c.profile), drama: isDrama(c.profile) }]));
+  const titles = new Map(rows.map((p) => [p.id, p.title]));
   return Response.json({
     channel: { id: active.id, name: active.name, kind: channelKind(active.profile) },
     projects: rows.map((p) => {
@@ -40,6 +41,11 @@ export const GET = handler(async (req: Request) => {
         channelName: channels.get(p.channelId)?.name ?? "",
         kind: channels.get(p.channelId)?.kind ?? "longform",
         voiceMode: p.voiceMode,
+        // Drama: a story project (holds the whole story) or a chapter video made from one.
+        isStory: Boolean(channels.get(p.channelId)?.drama) && !p.parentId,
+        parentId: p.parentId,
+        parentTitle: p.parentId ? (titles.get(p.parentId) ?? null) : null,
+        chapter: p.chapter,
         productId: p.productId,
         // Live progress for the list (batches run many videos at once).
         autopilot: p.autopilot ? { status: autopilotState(p.id)?.interrupted ? "error" : p.autopilot.status, step: p.autopilot.step, error: p.autopilot.error ?? null } : null,

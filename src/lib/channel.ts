@@ -2,8 +2,21 @@ import { pickFont, type FontKey } from "./languages";
 export type TopicAngle = { id: number; name: string; template: string; description: string };
 
 /** One step of a video's structure. `share` is the rough % of the video it should take. */
-export type OutlineBeat = { key: string; name: string; purpose: string; guidance: string; share: number };
+export type OutlineBeat = {
+  key: string;
+  name: string;
+  purpose: string;
+  guidance: string;
+  share: number;
+  /**
+   * Drama templates: which kind of chapter the beat belongs to. A story of N chapters uses the "first" beats for chapter 1,
+   * the "middle" beats for chapters 2..N-1 and the "last" beats for chapter N (see expandDramaTemplate).
+   */
+  role?: ChapterRole;
+};
 export type OutlineTemplate = { name: string; beats: OutlineBeat[] };
+export type ChapterRole = "first" | "middle" | "last";
+export const CHAPTER_ROLES: ChapterRole[] = ["first", "middle", "last"];
 
 export type Pacing = {
   maxWordsPerSentence: number; // script rule + long-sentence check
@@ -27,9 +40,23 @@ export const CHANNEL_KINDS: { key: ChannelKind; label: string }[] = [
   { key: "product_ad", label: "Product ad" },
 ];
 
+/**
+ * What a long-form channel's scripts are. "explainer" = factual, sourced, talks to the viewer (every channel made before genres).
+ * "drama" = original narrated fiction (family drama): invented characters, dialogue, chapters with cliffhangers.
+ */
+export type ChannelGenre = "explainer" | "drama";
+export const CHANNEL_GENRES: ChannelGenre[] = ["explainer", "drama"];
+
+export function genreOf(p: Pick<ChannelProfile, "genre">): ChannelGenre {
+  return p.genre === "drama" ? "drama" : "explainer";
+}
+export const isDrama = (p: Pick<ChannelProfile, "genre">) => genreOf(p) === "drama";
+
 export type ChannelProfile = {
   /** Missing means "longform" (every channel made before product ads). */
   kind?: ChannelKind;
+  /** Missing means "explainer". */
+  genre?: ChannelGenre;
   name: string;
   /** Language of everything the audience sees or hears (BCP-47, see src/lib/languages.ts). Defaults to English. */
   language?: string;

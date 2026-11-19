@@ -4,7 +4,8 @@ import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { ChevronRight, Sparkles } from "lucide-react";
 import { api } from "@/lib/client";
-import { lengthBudget, onScreenFont, pacingOf, polishEnabled, textColors, type ChannelProfile } from "@/lib/channel";
+import { genreOf, lengthBudget, onScreenFont, pacingOf, polishEnabled, textColors, type ChannelGenre, type ChannelProfile } from "@/lib/channel";
+import { defaultTemplateFor } from "@/lib/outline-templates";
 import { handFont } from "@/remotion/shared";
 import { OutlineTemplateEditor } from "./outline-template-editor";
 import { RowListEditor } from "./list-editor";
@@ -63,7 +64,7 @@ export function ProfileEditor({ value: p, onChange }: Props) {
             <Input value={p.name} onChange={(e) => set("name", e.target.value)} />
           </div>
           <div>
-            <Label hint={t("channel.profile.essentials.minutes")}>{t("channel.profile.essentials.videoLength")}</Label>
+            <Label hint={t("channel.profile.essentials.minutes")}>{t(genreOf(p) === "drama" ? "channel.profile.essentials.videoLengthDrama" : "channel.profile.essentials.videoLength")}</Label>
             <div className="flex items-center gap-1.5">
               <Input
                 type="number"
@@ -103,6 +104,27 @@ export function ProfileEditor({ value: p, onChange }: Props) {
                 {l.native !== l.name ? ` (${l.name})` : ""}
               </option>
             ))}
+          </Select>
+        </div>
+        <div>
+          <Label hint={t("channel.profile.essentials.genreHint")}>{t("channel.profile.essentials.genre")}</Label>
+          <Select
+            value={genreOf(p)}
+            onChange={(e) => {
+              const genre = e.target.value as ChannelGenre;
+              const template = defaultTemplateFor(genre);
+              const next: ChannelProfile = { ...p, genre };
+              if (p.outlineTemplate?.name !== template.name && confirm(t("channel.profile.essentials.genreSwitchConfirm", { name: template.name }))) {
+                next.outlineTemplate = structuredClone(template);
+              }
+              // Dialogue-heavy drama needs longer sentences than the explainer default.
+              if (genre === "drama" && pacingOf(p).maxWordsPerSentence < 22) next.pacing = { ...pacingOf(p), maxWordsPerSentence: 25 };
+              onChange(next);
+            }}
+            className="max-w-xs"
+          >
+            <option value="explainer">{t("channel.profile.essentials.genreExplainer")}</option>
+            <option value="drama">{t("channel.profile.essentials.genreDrama")}</option>
           </Select>
         </div>
         {field(t("channel.profile.essentials.niche"), p.niche, (v) => set("niche", v), 3)}

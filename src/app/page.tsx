@@ -16,6 +16,10 @@ type Row = {
   channelName: string;
   kind: "longform" | "product_ad";
   voiceMode: "voice" | "none";
+  isStory: boolean;
+  parentId: string | null;
+  parentTitle: string | null;
+  chapter: number | null;
   autopilot: { status: "running" | "paused" | "done" | "error" | "stopped"; step: string; error: string | null } | null;
   job: { type: string; progress: number; message: string | null } | null;
   approvals: Partial<Record<StepKey, string>>;
@@ -27,8 +31,22 @@ type Row = {
   coverUrl: string | null;
 };
 
+/** Chapter videos sit right after their story (in chapter order); everything else keeps the newest-first order. */
+function groupChapters(rows: Row[]): Row[] {
+  const byParent = new Map<string, Row[]>();
+  for (const r of rows) if (r.parentId) byParent.set(r.parentId, [...(byParent.get(r.parentId) ?? []), r]);
+  const present = new Set(rows.map((r) => r.id));
+  const out: Row[] = [];
+  for (const r of rows) {
+    if (r.parentId && present.has(r.parentId)) continue; // placed under its story
+    out.push(r);
+    for (const c of (byParent.get(r.id) ?? []).sort((a, b) => (a.chapter ?? 0) - (b.chapter ?? 0))) out.push(c);
+  }
+  return out;
+}
+
 function nextStep(r: Row) {
-  const steps = stepsFor(r.kind, r.voiceMode);
+  const steps = stepsFor(r.kind, r.voiceMode, r.isStory);
   return steps.find((s) => !r.approvals[s.key]) ?? steps[steps.length - 1];
 }
 
@@ -88,7 +106,7 @@ function VideoList() {
     // Keep progress moving while any video is being worked on.
     refetchInterval: (q) => (q.state.data?.projects.some((p) => p.autopilot?.status === "running" || p.job) ? 2000 : false),
   });
-  const projects = (data?.projects ?? []).filter((p) => !only || only.includes(p.id));
+  const projects = groupChapters((data?.projects ?? []).filter((p) => !only || only.includes(p.id)));
   const runningCount = projects.filter((p) => p.autopilot?.status === "running").length;
   const failedCount = projects.filter((p) => p.autopilot?.status === "error").length;
   const channelName = data?.channel.name ?? t("ideas.home.thisChannelFallback");
@@ -172,7 +190,7 @@ function VideoList() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
           {projects.map((p) => {
             const step = nextStep(p);
-            const steps = stepsFor(p.kind, p.voiceMode);
+            const steps = stepsFor(p.kind, p.voiceMode, p.isStory);
             const live = liveStatus(t, p);
             const done = steps.filter((s) => p.approvals[s.key]).length;
             return (
@@ -194,6 +212,11 @@ function VideoList() {
                   <div className="p-4">
                     {scope === "all" ? (
                       <div className="mb-1 truncate text-[11px] font-medium uppercase tracking-wide text-stone-500">{p.channelName}</div>
+                    ) : null}
+                    {p.isStory || p.parentId ? (
+                      <div className="mb-1 truncate text-[11px] font-medium uppercase tracking-wide text-brand-ink">
+                        {p.isStory ? t("ideas.home.storyBadge") : t("ideas.home.chapterBadge", { n: p.chapter ?? "?", story: p.parentTitle ?? "" })}
+                      </div>
                     ) : null}
                     <div className="line-clamp-2 font-medium leading-snug">{p.title}</div>
                     <div className="mt-3 flex gap-1">

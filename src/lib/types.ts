@@ -23,8 +23,12 @@ export const AD_STEPS: Step[] = [
 
 export type VoiceMode = "voice" | "none";
 
-/** Steps shown for a video. Silent product ads ("none") have no Voice step. */
-export function stepsFor(kind: "longform" | "product_ad" | undefined, voiceMode: VoiceMode = "voice"): readonly Step[] {
+/** Drama stories: the story project only holds the outline and the whole story; each chapter becomes its own video. */
+export const STORY_STEPS: Step[] = [{ key: "script", label: "Story", path: "script" }];
+
+/** Steps shown for a video. Silent product ads ("none") have no Voice step. Story projects only have the Story step. */
+export function stepsFor(kind: "longform" | "product_ad" | undefined, voiceMode: VoiceMode = "voice", story = false): readonly Step[] {
+  if (story) return STORY_STEPS;
   if (kind !== "product_ad") return STEPS;
   return voiceMode === "none" ? AD_STEPS.filter((s) => s.key !== "voice") : AD_STEPS;
 }
@@ -105,12 +109,17 @@ export const OutlineSchema = z.object({
     }),
   ),
   evidence: z.array(z.string()).describe("Named real researchers, studies, sites to use"),
+  chapters: z
+    .array(z.object({ n: z.number().int(), title: z.string(), summary: z.string() }))
+    .describe("Only for stories told in chapters: one entry per chapter (title in the channel language, one-line summary). Empty otherwise."),
 });
 type OutlineOut = z.infer<typeof OutlineSchema>;
-/** Stored outline. `notes` is optional because outlines saved before it existed don't have it. */
+export type OutlineChapter = OutlineOut["chapters"][number];
+/** Stored outline. `notes` and `chapters` are optional because outlines saved before they existed don't have them. */
 export type Outline = {
   sections: (Omit<OutlineOut["sections"][number], "notes"> & { notes?: string[] })[];
   evidence: string[];
+  chapters?: OutlineChapter[];
 };
 
 export const FactCheckSchema = z.object({

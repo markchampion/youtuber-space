@@ -9,6 +9,7 @@ import { CLAUDE_STEPS } from "@/lib/claude-models";
 import { recentJobs, runningJobOf } from "@/lib/jobs/queue";
 import { needsImage } from "@/lib/ai/prompts/image";
 import { channelKind } from "@/lib/channel";
+import { chapterVideos, createChapterVideos, detachChapterVideos, isStoryProject } from "@/lib/pipeline/chapters";
 import { approveStep, getChannel, getProject, paragraphsOf, scenesOf, sentencesOf, updateProject } from "@/lib/pipeline/common";
 import { deleteGeneratedVideos, deleteRender, generatedVideoBytes, listRenders, listVersions } from "@/lib/pipeline/history";
 import { approveScript, restoreVersion, factCheck, generateOutline, rewriteParagraph, saveOutline, saveScript, setFactVerified } from "@/lib/pipeline/script";
@@ -58,6 +59,12 @@ export const GET = handler(async (_req: Request, ctx: Ctx) => {
     ttsBackend: ttsBackend(),
     product: project.product ? { ...project.product, imageUrls: project.product.imagePaths.map((rel) => mediaUrl(rel)) } : null,
     channel: { id: channel.id, kind: channelKind(channel.profile), profile: channel.profile, voiceId: activeVoiceId(channel), voiceSettings: channel.voiceSettings, pronunciations: channel.pronunciations, characterRefUrl: mediaUrl(channel.characterRefPath) },
+    // Drama stories: the story project lists its chapter videos; a chapter video links back to its story.
+    story: {
+      isStory: isStoryProject(project, channel.profile),
+      parent: project.parentId ? { id: project.parentId, title: safeTitle(project.parentId), chapter: project.chapter } : null,
+      chapterVideos: isStoryProject(project, channel.profile) ? chapterVideos(id) : [],
+    },
     paragraphs: paragraphsOf(id).map((p) => ({
       ...p,
       audioUrl: mediaUrl(p.audioPath, p.voiceHash ?? undefined),
@@ -86,9 +93,18 @@ export const GET = handler(async (_req: Request, ctx: Ctx) => {
   });
 });
 
+function safeTitle(id: string) {
+  try {
+    return getProject(id).title;
+  } catch {
+    return "";
+  }
+}
+
 export const DELETE = handler(async (_req: Request, ctx: Ctx) => {
   const { id } = await ctx.params;
   getProject(id);
+  detachChapterVideos(id);
   for (const s of listShorts(id)) deleteShort(s.id);
   for (const t of [schema.paragraphs, schema.sentences, schema.scenes, schema.jobs, schema.costs, schema.renders, schema.textVersions] as const) {
     db.delete(t).where(eq(t.projectId, id)).run();
@@ -117,7 +133,9 @@ export const POST = handler(async (req: Request, ctx: Ctx) => {
 
     // Script
     case "outline":
-      return ok({ outline: await generateOutline(id, b.template) });
+      return ok({ outline: await generateOutline(id, b.template, typeof b.chapters === "number" ? b.chapters : "auto") });
+    case "chapterVideos":
+      return ok(createChapterVideos(id, Array.isArray(b.chapters) ? b.chapters.map(Number) : [], Boolean(b.force)));
     case "saveOutline":
       saveOutline(id, b.outline);
       return ok();

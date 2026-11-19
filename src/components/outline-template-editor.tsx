@@ -4,8 +4,8 @@ import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { ArrowDown, ArrowUp, GraduationCap, Plus, Trash2 } from "lucide-react";
 import { api } from "@/lib/client";
-import { pacingOf, type ChannelProfile, type OutlineBeat, type OutlineTemplate } from "@/lib/channel";
-import { DEFAULT_OUTLINE_TEMPLATE, OUTLINE_TEMPLATES } from "@/lib/outline-templates";
+import { genreOf, pacingOf, type ChannelProfile, type OutlineBeat, type OutlineTemplate } from "@/lib/channel";
+import { ALL_OUTLINE_TEMPLATES, defaultTemplateFor } from "@/lib/outline-templates";
 import type { TranscriptAnalysis } from "@/lib/types";
 import { Badge, Button, ErrorNote, Input, Label, Select, Textarea } from "./ui";
 import { useT } from "@/lib/i18n";
@@ -15,7 +15,7 @@ type Stats = { words: number; sentences: number; avgWordsPerSentence: number; wo
 /** Edit the structure every outline follows, pick a built-in one, or learn one from a transcript. */
 export function OutlineTemplateEditor({ profile, onChange }: { profile: ChannelProfile; onChange: (p: ChannelProfile) => void }) {
   const tr = useT();
-  const t: OutlineTemplate = profile.outlineTemplate?.beats?.length ? profile.outlineTemplate : DEFAULT_OUTLINE_TEMPLATE;
+  const t: OutlineTemplate = profile.outlineTemplate?.beats?.length ? profile.outlineTemplate : defaultTemplateFor(genreOf(profile));
   const setT = (next: OutlineTemplate) => onChange({ ...profile, outlineTemplate: next });
   const setBeat = (i: number, patch: Partial<OutlineBeat>) => setT({ ...t, beats: t.beats.map((b, j) => (j === i ? { ...b, ...patch } : b)) });
   const move = (i: number, d: -1 | 1) => {
@@ -38,12 +38,12 @@ export function OutlineTemplateEditor({ profile, onChange }: { profile: ChannelP
             className="w-60"
             value=""
             onChange={(e) => {
-              const pick = OUTLINE_TEMPLATES.find((x) => x.name === e.target.value);
+              const pick = ALL_OUTLINE_TEMPLATES.find((x) => x.name === e.target.value);
               if (pick && confirm(tr("script.template.replaceConfirm", { name: pick.name }))) setT(structuredClone(pick));
             }}
           >
             <option value="">{tr("script.template.choose")}</option>
-            {OUTLINE_TEMPLATES.map((x) => (
+            {ALL_OUTLINE_TEMPLATES.map((x) => (
               <option key={x.name} value={x.name}>
                 {tr("script.template.parts", { name: x.name, count: x.beats.length })}
               </option>

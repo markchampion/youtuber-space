@@ -27,6 +27,12 @@ export type ProjectData = {
   ttsBackend: "elevenlabs" | "local";
   /** Product ads only. */
   product: (ProductBrief & { imageUrls: (string | null)[] }) | null;
+  /** Drama stories: chapter videos of a story project, or the story a chapter video came from. */
+  story: {
+    isStory: boolean;
+    parent: { id: string; title: string; chapter: number | null } | null;
+    chapterVideos: { id: string; chapter: number; title: string; scriptApproved: boolean; differs: boolean; updatedAt: string }[];
+  };
   paragraphs: (Paragraph & { audioUrl: string | null; needsVoice: boolean })[];
   sentences: Sentence[];
   scenes: (Scene & { prompt: string; imageUrl: string | null; needsImage: boolean; start: number | null })[];

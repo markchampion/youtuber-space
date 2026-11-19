@@ -1,7 +1,7 @@
 import type { AutoStep, ChannelProfile, LegacyFields, ProfileV1 } from "./channel";
 import { FONT_OPTIONS, getLanguage } from "./languages";
-import { AUTO_STEPS, DEFAULT_LENGTH, autopilotOf, pacingOf } from "./channel";
-import { DEFAULT_OUTLINE_TEMPLATE } from "./outline-templates";
+import { AUTO_STEPS, CHAPTER_ROLES, DEFAULT_LENGTH, autopilotOf, genreOf, pacingOf } from "./channel";
+import { DEFAULT_OUTLINE_TEMPLATE, defaultTemplateFor } from "./outline-templates";
 
 const HEX = /^#[0-9a-f]{6}$/i;
 
@@ -78,9 +78,10 @@ export function normalizeProfile(input: ChannelProfile | ProfileV1): ChannelProf
   // Drop the derived word count; minutes are the only length setting now.
   const { scriptWords: _words, ...rest } = p;
   void _words;
-  const template = p.outlineTemplate?.beats?.length ? p.outlineTemplate : DEFAULT_OUTLINE_TEMPLATE;
+  const template = p.outlineTemplate?.beats?.length ? p.outlineTemplate : defaultTemplateFor(genreOf(p));
   return {
     ...rest,
+    genre: genreOf(p),
     format: stripLength(p.format ?? ""),
     profileVersion: 2,
     autopilot,
@@ -97,7 +98,12 @@ export function normalizeProfile(input: ChannelProfile | ProfileV1): ChannelProf
       name: template.name.trim() || "Custom",
       beats: template.beats
         .filter((b) => b.name.trim() || b.purpose.trim())
-        .map((b, i) => ({ ...b, key: slugKey(b.key || b.name) || `beat_${i + 1}`, share: clamp(Math.round(b.share) || 5, 1, 60) })),
+        .map((b, i) => ({
+          ...b,
+          key: slugKey(b.key || b.name) || `beat_${i + 1}`,
+          share: clamp(Math.round(b.share) || 5, 1, 60),
+          role: b.role && CHAPTER_ROLES.includes(b.role) ? b.role : undefined,
+        })),
     },
     topicAngles,
     lengthMinutes,
