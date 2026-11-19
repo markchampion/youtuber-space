@@ -1,7 +1,7 @@
 import { genreOf, isDrama, lengthBudget, pacingOf, type ChannelProfile, type OutlineTemplate, type TopicAngle } from "@/lib/channel";
 import { beatOfKey, beatsOfRole, chapterOfKey, defaultTemplateFor, expandDramaTemplate, isChapterTemplate } from "@/lib/outline-templates";
 import { GENERIC_SPEECH_GUIDE, getLanguage } from "@/lib/languages";
-import type { Outline } from "@/lib/types";
+import type { Outline, SeriesEpisode } from "@/lib/types";
 
 const list = (xs: string[]) => xs.map((x) => `- ${x}`).join("\n");
 
@@ -151,6 +151,44 @@ function fmtRange(min: number, max: number) {
 function fmtMinutes(m: number) {
   const secs = Math.round(m * 60);
   return secs < 120 ? `${secs} seconds` : `${Math.round(m * 10) / 10} minutes`;
+}
+
+/** Plan a multi-episode series: N long videos on one topic with no overlap between them. */
+export function seriesPlanPrompt(opts: { topic: string; hook?: string | null; episodes: number; avoid: string[] }) {
+  return `Plan a series of ${opts.episodes} long videos for this channel on this topic: "${opts.topic}".${opts.hook ? ` Suggested opening for episode 1: "${opts.hook}"` : ""}
+
+Each episode is a full video of the channel's usual length and must work on its own for someone who never saw the others, while rewarding people who watch them in order.
+- Split the topic so every episode has its own clear question and payoff. No point, story or source may be the main material of two episodes.
+- Order them so curiosity builds: the strongest standalone hook goes first, and each episode leaves a real reason to watch the next.
+- Titles: scroll-stopping, under 70 characters, in the channel's title style. Don't put "Part 1" or episode numbers in titles; the app adds them where needed.
+- "covers" lists 3–6 short points that episode is about (in the channel language). "teaser" is one spoken line that ends the episode by teasing the next one (empty for the last episode).
+${opts.avoid.length ? `\nDon't repeat these existing video titles:\n${list(opts.avoid.slice(0, 100))}` : ""}`;
+}
+
+/**
+ * Added to the outline, script and metadata prompts of a series episode, so it knows what the other
+ * episodes cover. `episode` is 1-based.
+ */
+export function seriesContext(series: { title: string; premise: string; episodes: SeriesEpisode[] }, episode: number) {
+  const n = series.episodes.length;
+  const i = Math.min(Math.max(episode, 1), n) - 1;
+  const fmt = (e: SeriesEpisode, k: number) => `Episode ${k + 1}: "${e.title}" — ${e.covers.join("; ")}`;
+  const before = series.episodes.slice(0, i).map((e, k) => fmt(e, k));
+  const after = series.episodes.slice(i + 1).map((e, k) => fmt(e, i + 1 + k));
+  const me = series.episodes[i];
+  const next = series.episodes[i + 1];
+  const rules = [
+    "Stay on this episode's own points. It must make sense to someone who never saw the other episodes.",
+    before.length ? "Don't retell what earlier episodes covered; at most refer back to it in one short line." : "",
+    after.length ? "Don't use material that belongs to later episodes." : "",
+    i > 0 ? "Right after the hook, add a one- or two-sentence recap of the series so far, in the channel voice, for new viewers." : "",
+    next ? `End with a short spoken tease of the next episode ("${next.title}")${me.teaser ? `, along the lines of: "${me.teaser}"` : ""}.` : "This is the final episode: end the whole series with a satisfying close.",
+  ].filter(Boolean);
+  return `<series>
+This video is episode ${i + 1} of ${n} in the series "${series.title}": ${series.premise}
+This episode covers: ${me.covers.join("; ")}
+${before.length ? `Earlier episodes:\n${list(before)}\n` : ""}${after.length ? `Later episodes:\n${list(after)}\n` : ""}</series>
+${list(rules)}`;
 }
 
 export function outlinePrompt(p: ChannelProfile, title: string, hook?: string | null, template: OutlineTemplate = templateOf(p), chapters: ChapterCount = "auto") {

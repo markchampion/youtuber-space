@@ -99,6 +99,13 @@
       "when": 1795101647255,
       "tag": "0013_story_chapters",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "6",
+      "when": 1795102609830,
+      "tag": "0014_series",
+      "breakpoints": true
     }
   ]
 }

@@ -14,6 +14,7 @@ import { FactCheckSchema, OutlineSchema, type FactCheck, type Outline } from "@/
 import { acceptPolish, splitParagraphs, splitSentences, wordCount } from "@/lib/sync";
 import { getVersion, recordVersion, snapshotCurrent } from "./history";
 import type { VersionSource } from "@/lib/history-rules";
+import { seriesBlock } from "./series-context";
 import { applySilentTiming, approveStep, getChannel, getProject, markChanged, paragraphsOf, scenesOf, updateProject } from "./common";
 
 const DRY_OUTLINE: Outline = {
@@ -59,7 +60,7 @@ export async function generateOutline(projectId: string, templateName?: string |
       : DRY_OUTLINE
     : await claudeJSON(OutlineSchema, {
         system: channelBrief(channel.profile),
-        user: outlinePrompt(channel.profile, p.title, p.hook, template, chapters),
+        user: outlinePrompt(channel.profile, p.title, p.hook, template, chapters) + seriesBlock(p, "story"),
         effort: "high",
         kind: "outline",
         projectId,
@@ -99,7 +100,7 @@ export async function generateScript(projectId: string, onText: (d: string) => v
   } else {
     script = await claudeText({
       system: channelBrief(channel.profile),
-      user: scriptPrompt(channel.profile, p.title, p.outline),
+      user: scriptPrompt(channel.profile, p.title, p.outline) + seriesBlock(p, "story"),
       effort: "high",
       maxTokens: 64000,
       kind: "script",

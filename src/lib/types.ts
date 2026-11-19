@@ -134,6 +134,21 @@ export const FactCheckSchema = z.object({
 });
 export type FactCheck = z.infer<typeof FactCheckSchema>["claims"][number] & { verified?: boolean };
 
+// ---------- Series (multi-episode long videos) ----------
+export const SeriesEpisodeSchema = z.object({
+  title: z.string().describe("Episode title, in the channel's title style and language"),
+  hook: z.string().describe("The first 1-2 lines of narration, in the channel voice"),
+  covers: z.array(z.string()).describe("3-6 short points this episode covers. No point may appear in another episode."),
+  teaser: z.string().describe("One line that ends this episode by teasing the next one. Empty for the last episode."),
+});
+export const SeriesPlanSchema = z.object({
+  title: z.string().describe("Name of the whole series"),
+  premise: z.string().describe("One or two sentences: what the series is about and why it is told in parts"),
+  episodes: z.array(SeriesEpisodeSchema),
+});
+export type SeriesEpisode = z.infer<typeof SeriesEpisodeSchema>;
+export type SeriesPlan = z.infer<typeof SeriesPlanSchema>;
+
 // ---------- Scenes ----------
 export const SceneSchema = z.object({
   fromSentence: z.number().int(),

@@ -26,7 +26,7 @@ export type ClaudeStep = "ideas" | "outline" | "script" | "polish" | "fact_check
  */
 export const CLAUDE_STEPS: { key: ClaudeStep; label: string; help: string; kinds: string[]; tokens: [number, number] }[] = [
   { key: "ideas", label: "Ideas & evaluation", help: "Idea batches and scorecards", kinds: ["ideas", "evaluate_idea"], tokens: [5000, 5000] },
-  { key: "outline", label: "Outline", help: "Story structure and evidence", kinds: ["outline"], tokens: [2500, 2500] },
+  { key: "outline", label: "Outline", help: "Story structure and evidence", kinds: ["outline", "series_plan"], tokens: [2500, 2500] },
   { key: "script", label: "Script & rewrites", help: "The narration people hear", kinds: ["script", "rewrite"], tokens: [3500, 8000] },
   { key: "polish", label: "Natural-speech pass", help: "Rewrites the script so it sounds spoken, not written", kinds: ["polish"], tokens: [4500, 6000] },
   { key: "fact_check", label: "Fact check", help: "Flags names and claims to verify", kinds: ["fact_check"], tokens: [4500, 3000] },

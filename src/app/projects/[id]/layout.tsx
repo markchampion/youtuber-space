@@ -47,6 +47,13 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
               </>
             ) : null}
             {angle !== "—" ? <Badge tone="brand">{angle}</Badge> : null}
+            {data.series && project.episode ? (
+              <Link href={`/series/${data.series.id}`} className="hover:text-stone-800">
+                <Badge tone="blue">
+                  {t("series.episodeOf", { n: project.episode, total: data.series.total })} · {data.series.title}
+                </Badge>
+              </Link>
+            ) : null}
           </div>
           <h1 className="mt-1 truncate text-xl font-semibold tracking-tight">{project.title}</h1>
         </div>

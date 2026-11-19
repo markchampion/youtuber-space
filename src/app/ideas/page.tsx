@@ -4,8 +4,9 @@ import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ClipboardCheck, Lightbulb, Sparkles, Star, Trash2, Wand2 } from "lucide-react";
+import { ClipboardCheck, Layers, Lightbulb, Sparkles, Star, Trash2, Wand2 } from "lucide-react";
 import { api, useChannel, type Idea } from "@/lib/client";
+import type { Series } from "@/lib/db/schema";
 import { angleName, isAdChannel, type ChannelProfile } from "@/lib/channel";
 import { Scorecard, ScoreRing } from "@/components/scorecard";
 import { Badge, Button, Card, EmptyState, ErrorNote, Input, Label, Select, Spinner, Tabs, Textarea, cn } from "@/components/ui";
@@ -58,7 +59,10 @@ export default function IdeasPage() {
           {adB}
         </EmptyState>
       ) : mode === "generate" ? (
-        <Generate profile={profile} channelId={channelData.channel.id} />
+        <>
+          <SeriesStrip />
+          <Generate profile={profile} channelId={channelData.channel.id} />
+        </>
       ) : (
         <Evaluate profile={profile} />
       )}
@@ -77,6 +81,83 @@ function useStartProject() {
       api<{ projectId: string }>("/api/ideas", { json: { action: "start", ...body } }),
     onSuccess: ({ projectId }) => router.push(`/projects/${projectId}/script`),
   });
+}
+
+// ---------------- Series ----------------
+
+const EPISODE_CHOICES = [2, 3, 4, 5, 6, 8, 10];
+
+function usePlanSeries() {
+  const router = useRouter();
+  return useMutation({
+    mutationFn: (body: { topic: string; episodes: number; ideaId?: string }) => api<{ series: Series }>("/api/series", { json: body }),
+    onSuccess: ({ series }) => router.push(`/series/${series.id}`),
+  });
+}
+
+/** Pick an episode count and plan a series. Planning takes a minute or two, so say so. */
+function PlanSeriesControl({ topic, ideaId, onCancel }: { topic: string; ideaId?: string; onCancel?: () => void }) {
+  const t = useT();
+  const [episodes, setEpisodes] = useState(3);
+  const plan = usePlanSeries();
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={episodes} onChange={(e) => setEpisodes(Number(e.target.value))} className="h-8 w-auto text-sm" disabled={plan.isPending}>
+          {EPISODE_CHOICES.map((n) => (
+            <option key={n} value={n}>
+              {t("series.episodesCount", { n })}
+            </option>
+          ))}
+        </Select>
+        <Button size="sm" variant="primary" loading={plan.isPending} disabled={!topic.trim()} onClick={() => plan.mutate({ topic, episodes, ideaId })}>
+          {t("series.plan")}
+        </Button>
+        {onCancel && !plan.isPending ? (
+          <Button size="sm" variant="ghost" onClick={onCancel}>
+            ✕
+          </Button>
+        ) : null}
+      </div>
+      {plan.isPending ? <div className="text-xs text-stone-500">{t("series.planning")}</div> : null}
+      <ErrorNote error={plan.error} />
+    </div>
+  );
+}
+
+/** Existing series of this channel, plus planning one from a free topic. */
+function SeriesStrip() {
+  const t = useT();
+  const { data } = useQuery({ queryKey: ["series"], queryFn: () => api<{ series: Series[] }>("/api/series") });
+  const [topic, setTopic] = useState("");
+  const list = data?.series ?? [];
+  return (
+    <Card className="mb-6 p-4">
+      <div className="flex flex-wrap items-start gap-x-6 gap-y-3">
+        <div className="min-w-0 flex-1">
+          <div className="mb-2 flex items-center gap-2 text-sm font-medium">
+            <Layers className="size-4 text-stone-500" /> {t("series.yourSeries")}
+          </div>
+          {list.length ? (
+            <div className="flex flex-wrap gap-1.5">
+              {list.map((s) => (
+                <Link key={s.id} href={`/series/${s.id}`} className="rounded-md bg-stone-100 px-2.5 py-1 text-sm hover:bg-stone-200">
+                  {s.title} <span className="text-stone-500">· {t("series.episodesCount", { n: s.episodes.length })}</span>
+                </Link>
+              ))}
+            </div>
+          ) : (
+            <div className="text-sm text-stone-500">{t("series.empty")}</div>
+          )}
+        </div>
+        <div className="w-full max-w-md space-y-2">
+          <Label>{t("series.newFromTopic")}</Label>
+          <Input value={topic} onChange={(e) => setTopic(e.target.value)} placeholder={t("series.topicPlaceholder")} />
+          {topic.trim() ? <PlanSeriesControl topic={topic} /> : null}
+        </div>
+      </div>
+    </Card>
+  );
 }
 
 // ---------------- Generate ----------------
@@ -284,6 +365,7 @@ function IdeaCard({
     onSuccess: () => qc.invalidateQueries({ queryKey: ["ideas"] }),
   });
   const evaluating = act.isPending && act.variables?.action === "evaluate";
+  const [seriesOpen, setSeriesOpen] = useState(false);
 
   return (
     <Card className={cn("p-4", open && "lg:col-span-2")}>
@@ -330,6 +412,9 @@ function IdeaCard({
         <Button size="sm" variant="ghost" loading={moreLoading} onClick={onMoreLike} icon={<Wand2 className="size-3.5" />}>
           {t("ideas.card.moreLike")}
         </Button>
+        <Button size="sm" variant="ghost" onClick={() => setSeriesOpen((v) => !v)} icon={<Layers className="size-3.5" />}>
+          {t("series.makeSeries")}
+        </Button>
         <Button
           size="sm"
           variant="ghost"
@@ -339,6 +424,11 @@ function IdeaCard({
           icon={<Trash2 className="size-3.5" />}
         />
       </div>
+      {seriesOpen ? (
+        <div className="mt-3 border-t border-stone-200 pt-3">
+          <PlanSeriesControl topic={idea.title} ideaId={idea.id} onCancel={() => setSeriesOpen(false)} />
+        </div>
+      ) : null}
       {act.error ? (
         <div className="mt-3">
           <ErrorNote error={act.error} />

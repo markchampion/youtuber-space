@@ -10,6 +10,7 @@ import { imageProvider } from "@/lib/image/provider";
 import { absPath, projectRel, writeMedia } from "@/lib/media";
 import { imageLimit } from "@/lib/jobs/queue";
 import { getChannel, getProject, updateProject } from "./common";
+import { seriesBlock } from "./series-context";
 
 export async function generateMetadata(projectId: string) {
   const p = getProject(projectId);
@@ -26,7 +27,7 @@ export async function generateMetadata(projectId: string) {
       }
     : await claudeJSON(MetadataSchema, {
         system: channelBrief(channel.profile),
-        user: metadataPrompt(channel.profile, p.title, p.script),
+        user: metadataPrompt(channel.profile, p.title, p.script) + seriesBlock(p, "metadata"),
         effort: "medium",
         kind: "metadata",
         projectId,

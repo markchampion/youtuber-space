@@ -41,7 +41,9 @@ function LongScriptPage() {
   const [view, setView] = useState<"edit" | "paragraphs">("edit");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [phase, setPhase] = useState<"writing" | "polishing" | "shortening" | "trimming" | null>(null);
-  const [progress, setProgress] = useState<ChapterProgress | null>(null);
+  const [chapterProgress, setChapterProgress] = useState<ChapterProgress | null>(null);
+  // Progress while Claude works: which pass, when it started, and whether its first words arrived yet.
+  const [progress, setProgress] = useState<{ step: number; total: number; since: number; gotText: boolean } | null>(null);
   const loaded = useRef(false);
   const lastServer = useRef("");
   const pilot = autopilotRunning(data);
@@ -81,11 +83,14 @@ function LongScriptPage() {
     setStreaming(true);
     setPhase(mode === "polish" ? "polishing" : mode === "shorten" ? "shortening" : mode === "trim" ? "trimming" : "writing");
     setStreamError(null);
-    setProgress(null);
+    setChapterProgress(null);
     // A story continued from a missing chapter keeps the chapters already written above the new text.
     const before = mode === "continue" ? draft.trimEnd() : "";
     if (mode === "write") setDraft("");
     setView("edit");
+    const polishOn = profile ? profile.polishPass ?? (profile.language ?? "en") !== "en" : false;
+    let passesSeen = 0;
+    setProgress({ step: 1, total: mode === "write" && polishOn ? 2 : 1, since: Date.now(), gotText: false });
     try {
       const res = await fetch(`/api/projects/${id}/script-stream${mode === "write" ? "" : `?mode=${mode}`}`, { method: "POST" });
       const reader = res.body!.getReader();
@@ -105,7 +110,7 @@ function LongScriptPage() {
         if (text.includes("[[CHAPTER ")) {
           const marks = [...text.matchAll(CHAPTER_MARKER)];
           const m = marks[marks.length - 1];
-          if (m) setProgress({ n: Number(m[1]), count: Number(m[2]), phase: (m[3] as "polish" | "trim" | undefined) ?? "writing" });
+          if (m) setChapterProgress({ n: Number(m[1]), count: Number(m[2]), phase: (m[3] as "polish" | "trim" | undefined) ?? "writing" });
           text = text.replace(CHAPTER_MARKER, (_all, n: string, _c, ph?: string) =>
             ph ? "" : `\n\n${chapterHeader(Number(n), data?.project.outline?.chapters?.find((c) => c.n === Number(n))?.title ?? "", locale)}\n\n`,
           );
@@ -114,14 +119,20 @@ function LongScriptPage() {
         // Each follow-up pass (natural speech, then trim if too long) replaces the text as it streams in.
         const polish = text.lastIndexOf("[[POLISH]]");
         if (polish >= 0) {
-          if (mode === "write") {
-            const passes = text.split("[[POLISH]]").length - 1;
-            const polishOn = profile ? profile.polishPass ?? (profile.language ?? "en") !== "en" : false;
-            setPhase(passes >= 2 || !polishOn ? "trimming" : "polishing");
+          const passes = text.split("[[POLISH]]").length - 1;
+          if (mode === "write") setPhase(passes >= 2 || !polishOn ? "trimming" : "polishing");
+          if (passes !== passesSeen) {
+            passesSeen = passes;
+            // Rewrite modes send one marker up front; in "write" each marker starts a new pass (a trim adds one).
+            const step = mode === "write" ? passes + 1 : 1;
+            setProgress((p) => ({ step, total: Math.max(p?.total ?? 1, step), since: Date.now(), gotText: false }));
           }
           text = text.slice(polish + "[[POLISH]]".length).trimStart();
         }
-        if (text) setDraft(text);
+        if (text) {
+          setDraft(text);
+          setProgress((p) => (p && !p.gotText ? { ...p, gotText: true } : p));
+        }
       }
     } catch (e) {
       setStreamError(String(e));
@@ -132,6 +143,7 @@ function LongScriptPage() {
       setStreaming(false);
       setPhase(null);
       setProgress(null);
+      setChapterProgress(null);
     }
   }
 
@@ -194,11 +206,11 @@ function LongScriptPage() {
                 {words && tooLong ? t("script.overLimit", { max: fmtLen(b.maxMinutes) }) : ""}
               </Badge>
             )}
-            {progress ? (
+            {chapterProgress ? (
               <span className="text-xs font-medium text-brand-ink">
-                {t(progress.phase === "polish" ? "script.story.polishingChapter" : progress.phase === "trim" ? "script.story.trimmingChapter" : "script.story.writingChapter", {
-                  n: progress.n,
-                  count: progress.count,
+                {t(chapterProgress.phase === "polish" ? "script.story.polishingChapter" : chapterProgress.phase === "trim" ? "script.story.trimmingChapter" : "script.story.writingChapter", {
+                  n: chapterProgress.n,
+                  count: chapterProgress.count,
                 })}
               </span>
             ) : null}
@@ -272,6 +284,7 @@ function LongScriptPage() {
             </div>
           </div>
           {streamError ? <ErrorNote error={streamError} /> : null}
+          {streaming && progress ? <ScriptProgress progress={progress} phase={phase} /> : null}
 
           {!draft && !streaming ? (
             <EmptyState icon={<PenLine className="size-8" />} title={t("script.empty")}>
@@ -283,7 +296,10 @@ function LongScriptPage() {
               onChange={(e) => setDraft(e.target.value)}
               readOnly={streaming || pilot}
               title={pilot ? t("script.editLocked") : undefined}
-              className="min-h-[60vh] resize-y p-5 font-[Georgia,serif] text-[16px] leading-8"
+              className={cn(
+                "min-h-[60vh] resize-y p-5 font-[Georgia,serif] text-[16px] leading-8",
+                streaming && progress && !progress.gotText && "opacity-50",
+              )}
               spellCheck
             />
           ) : (
@@ -333,6 +349,40 @@ function LongScriptPage() {
               : t("script.hintApprove")
         }
       />
+    </div>
+  );
+}
+
+/** "Step 1 of 2 · Writing draft · 0:47", plus a note while Claude thinks before its first words. */
+function ScriptProgress({
+  progress,
+  phase,
+}: {
+  progress: { step: number; total: number; since: number; gotText: boolean };
+  phase: "writing" | "polishing" | "shortening" | "trimming" | null;
+}) {
+  const t = useT();
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(timer);
+  }, []);
+  const secs = Math.max(0, Math.floor((now - progress.since) / 1000));
+  const label =
+    phase === "polishing" ? t("script.progressPolish") : phase === "trimming" ? t("script.progressTrim") : phase === "shortening" ? t("script.progressShorten") : t("script.progressDraft");
+  return (
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm">
+      <Spinner />
+      <span className="font-medium">
+        {progress.total > 1 ? `${t("script.progressStep", { n: progress.step, total: progress.total })} · ` : ""}
+        {label}
+      </span>
+      <span className="tabular-nums text-stone-500">
+        {Math.floor(secs / 60)}:{String(secs % 60).padStart(2, "0")}
+      </span>
+      {!progress.gotText ? (
+        <span className="w-full text-xs text-stone-500">{progress.step > 1 || phase !== "writing" ? t("script.progressReplacing") : t("script.progressThinking")}</span>
+      ) : null}
     </div>
   );
 }

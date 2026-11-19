@@ -1,6 +1,6 @@
 import { sqliteTable, text, integer, real } from "drizzle-orm/sqlite-core";
 import type { AutopilotState, Branding, ChannelProfile, VoiceOverride, VoiceSettings } from "@/lib/channel";
-import type { IdeaEvaluation, Outline, FactCheck, Metadata, ProductBrief, StepKey } from "@/lib/types";
+import type { IdeaEvaluation, Outline, FactCheck, Metadata, ProductBrief, SeriesEpisode, StepKey } from "@/lib/types";
 
 const now = () => new Date().toISOString();
 
@@ -81,8 +81,22 @@ export const projects = sqliteTable("projects", {
   // Both null for ordinary videos and for the story project itself.
   parentId: text("parent_id"),
   chapter: integer("chapter"),
+  // Multi-episode series: the series it belongs to and its 1-based episode number. Null = standalone video.
+  seriesId: text("series_id"),
+  episode: integer("episode"),
   createdAt: text("created_at").notNull().$defaultFn(now),
   updatedAt: text("updated_at").notNull().$defaultFn(now),
+});
+
+/** A planned run of long videos on one topic. Each episode becomes a project (projects.seriesId). */
+export const series = sqliteTable("series", {
+  id: text("id").primaryKey(),
+  channelId: text("channel_id").notNull(),
+  ideaId: text("idea_id"),
+  title: text("title").notNull(),
+  premise: text("premise").notNull(),
+  episodes: text("episodes", { mode: "json" }).$type<SeriesEpisode[]>().notNull(),
+  createdAt: text("created_at").notNull().$defaultFn(now),
 });
 
 /** Saved products of a product-ad channel, reused to make new videos. */
@@ -237,6 +251,7 @@ export type Channel = typeof channels.$inferSelect;
 export type Idea = typeof ideas.$inferSelect;
 export type Project = typeof projects.$inferSelect;
 export type Product = typeof products.$inferSelect;
+export type Series = typeof series.$inferSelect;
 export type Paragraph = typeof paragraphs.$inferSelect;
 export type Sentence = typeof sentences.$inferSelect;
 export type Scene = typeof scenes.$inferSelect;

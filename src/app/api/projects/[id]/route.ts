@@ -36,6 +36,12 @@ import type { StepKey } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
+function seriesInfo(seriesId: string | null) {
+  if (!seriesId) return null;
+  const s = db.select().from(schema.series).where(eq(schema.series.id, seriesId)).get();
+  return s ? { id: s.id, title: s.title, total: s.episodes.length } : null;
+}
+
 type Ctx = RouteContext<"/api/projects/[id]">;
 
 export const GET = handler(async (_req: Request, ctx: Ctx) => {
@@ -57,6 +63,7 @@ export const GET = handler(async (_req: Request, ctx: Ctx) => {
       autopilot: autopilotState(id),
     },
     ttsBackend: ttsBackend(),
+    series: seriesInfo(project.seriesId),
     product: project.product ? { ...project.product, imageUrls: project.product.imagePaths.map((rel) => mediaUrl(rel)) } : null,
     channel: { id: channel.id, kind: channelKind(channel.profile), profile: channel.profile, voiceId: activeVoiceId(channel), voiceSettings: channel.voiceSettings, pronunciations: channel.pronunciations, characterRefUrl: mediaUrl(channel.characterRefPath) },
     // Drama stories: the story project lists its chapter videos; a chapter video links back to its story.
@@ -215,6 +222,9 @@ export const POST = handler(async (req: Request, ctx: Ctx) => {
     case "mergeScene":
       mergeWithPrevious(b.sceneId);
       return ok();
+    case "removeScene":
+      removeScene(b.sceneId);
+      return ok();
 
     // Images
     case "images":
@@ -222,9 +232,6 @@ export const POST = handler(async (req: Request, ctx: Ctx) => {
 
     // Preview & render
     case "videoProps":
-    case "removeScene":
-      removeScene(b.sceneId);
-      return ok();
       return ok({ props: buildRenderProps(id, { showCaptions: Boolean(b.showCaptions), kenBurns: b.kenBurns !== false, preview: true }).props });
     case "setTiming":
       setTiming(id, { visualLeadMs: b.visualLeadMs, playbackRate: b.playbackRate });

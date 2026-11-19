@@ -25,6 +25,8 @@ export type ProjectData = {
   channel: Pick<Channel, "id" | "profile" | "voiceId" | "voiceSettings" | "pronunciations"> & { kind: ChannelKind; characterRefUrl: string | null };
   /** Narration provider picked in Settings → Voice connection. */
   ttsBackend: "elevenlabs" | "local";
+  /** Set when this video is an episode of a series (project.episode is its number). */
+  series: { id: string; title: string; total: number } | null;
   /** Product ads only. */
   product: (ProductBrief & { imageUrls: (string | null)[] }) | null;
   /** Drama stories: chapter videos of a story project, or the story a chapter video came from. */

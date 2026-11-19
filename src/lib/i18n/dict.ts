@@ -9,6 +9,7 @@ import * as ideas from "./messages/ideas";
 import * as channel from "./messages/channel";
 import * as media from "./messages/media";
 import * as products from "./messages/products";
+import * as series from "./messages/series";
 
 export const en = {
   common: common.en,
@@ -20,6 +21,7 @@ export const en = {
   channel: channel.en,
   media: media.en,
   products: products.en,
+  series: series.en,
 };
 
 const vi = {
@@ -32,6 +34,7 @@ const vi = {
   channel: channel.vi,
   media: media.vi,
   products: products.vi,
+  series: series.vi,
 };
 
 export type Dict = typeof en;
