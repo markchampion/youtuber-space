@@ -1,6 +1,11 @@
 {
   "version": "0.0.1",
   "configurations": [
-    { "name": "dev", "runtimeExecutable": "npm", "runtimeArgs": ["run", "dev"], "port": 3001 }
+    {
+      "name": "dev",
+      "runtimeExecutable": "zsh",
+      "runtimeArgs": ["-lc", "source ~/.nvm/nvm.sh && nvm use >/dev/null && npm run dev"],
+      "port": 3001
+    }
   ]
 }
