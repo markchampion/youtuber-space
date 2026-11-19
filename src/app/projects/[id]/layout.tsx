@@ -10,7 +10,7 @@ import { angleName } from "@/lib/channel";
 import { Badge, Spinner, cn, fmtTime, fmtUsd } from "@/components/ui";
 import { stepLabel, useT } from "@/lib/i18n";
 
-const JOB_FOR_STEP: Record<string, string> = { voice: "voice", scenes: "scenes", images: "images", render: "render", shorts: "short" };
+const JOB_FOR_STEP: Record<string, string> = { script: "script", voice: "voice", scenes: "scenes", images: "images", render: "render", shorts: "short" };
 
 export default function ProjectLayout({ children }: { children: React.ReactNode }) {
   const t = useT();

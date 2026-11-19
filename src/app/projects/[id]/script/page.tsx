@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Download, FileSearch, History, ListTree, MessageCircle, PenLine, RefreshCw, Scissors, Shrink, Sparkles, Wand2 } from "lucide-react";
 import { HistoryPanel } from "@/components/history-panel";
 import { AdScriptEditor } from "@/components/ad-script-editor";
-import { api, autopilotRunning, useProject, useProjectAction, type ProjectData } from "@/lib/client";
+import { api, autopilotRunning, runningJob, useProject, useProjectAction, type ProjectData } from "@/lib/client";
 import { estimateMinutes, longSentences, splitParagraphs, splitSentences, wordCount } from "@/lib/sync";
 import { isDrama, lengthBudget, needsTrim, pacingOf, type ChannelProfile } from "@/lib/channel";
 import { ALL_OUTLINE_TEMPLATES, chapterOfKey, isChapterTemplate } from "@/lib/outline-templates";
@@ -16,6 +16,10 @@ import { templateOf } from "@/lib/ai/prompts";
 import type { Outline } from "@/lib/types";
 
 type ChapterProgress = { n: number; count: number; phase: "writing" | "polish" | "trim" };
+const SCRIPT_MODES = ["write", "continue", "polish", "shorten", "trim"] as const;
+type ScriptMode = (typeof SCRIPT_MODES)[number];
+type ScriptJob = { id: string; status: "running" | "done" | "error"; mode: string | null; output: string | null; error: string | null; createdAt: string };
+
 const CHAPTER_MARKER = /\n?\[\[CHAPTER (\d+)\/(\d+)(?: (polish|trim))?\]\]\n?/g;
 import { StaleBanner, StepFooter, StepHeader } from "@/components/step";
 import { Badge, Button, Card, EmptyState, ErrorNote, Input, Select, Spinner, Tabs, Textarea, cn, useSyncedState } from "@/components/ui";
@@ -45,6 +49,9 @@ function LongScriptPage() {
   // Progress while Claude works: which pass, when it started, and whether its first words arrived yet.
   const [progress, setProgress] = useState<{ step: number; total: number; since: number; gotText: boolean } | null>(null);
   const loaded = useRef(false);
+  // The script job this page is showing; cleared when you leave, which stops the polling.
+  const followed = useRef<object | null>(null);
+  const attached = useRef(false);
   const lastServer = useRef("");
   const pilot = autopilotRunning(data);
 
@@ -78,74 +85,119 @@ function LongScriptPage() {
   const long = useMemo(() => (pace ? longSentences(draft, locale, pace.maxWordsPerSentence) : []), [draft, locale, pace]);
   const profile = data?.channel.profile;
 
-  /** Stream the script (or only the natural-speech pass) into the editor. */
-  async function writeScript(mode: "write" | "continue" | "polish" | "shorten" | "trim" = "write") {
+  /** Start writing the script (or only one rewrite pass). It runs as a background job on the server. */
+  async function writeScript(mode: ScriptMode = "write") {
+    // A story continued from a missing chapter keeps the chapters already written above the new text.
+    const before = mode === "continue" ? draft.trimEnd() : "";
+    if (mode === "write") setDraft("");
+    await follow(mode, before, Date.now(), async () => {
+      const r = await api<{ jobId: string }>(`/api/projects/${id}/script-stream${mode === "write" ? "" : `?mode=${mode}`}`, { method: "POST" });
+      return r.jobId;
+    });
+  }
+
+  /**
+   * Show a script job's text as it comes in (polling about once a second) until it ends, then show what
+   * was saved. Also reattaches to a job that was started before you left the page. Leaving the page only
+   * stops the polling: the job keeps running on the server.
+   */
+  async function follow(mode: ScriptMode, before: string, since: number, start: () => Promise<string>) {
+    const token = {};
+    followed.current = token;
     setStreaming(true);
     setPhase(mode === "polish" ? "polishing" : mode === "shorten" ? "shortening" : mode === "trim" ? "trimming" : "writing");
     setStreamError(null);
     setChapterProgress(null);
-    // A story continued from a missing chapter keeps the chapters already written above the new text.
-    const before = mode === "continue" ? draft.trimEnd() : "";
-    if (mode === "write") setDraft("");
     setView("edit");
     const polishOn = profile ? profile.polishPass ?? (profile.language ?? "en") !== "en" : false;
     let passesSeen = 0;
-    setProgress({ step: 1, total: mode === "write" && polishOn ? 2 : 1, since: Date.now(), gotText: false });
+    setProgress({ step: 1, total: mode === "write" && polishOn ? 2 : 1, since, gotText: false });
+
+    const apply = (raw: string) => {
+      let text = raw;
+      const err = text.indexOf("[[ERROR]]");
+      if (err >= 0) {
+        setStreamError(text.slice(err + 9).trim());
+        text = text.slice(0, err).trimEnd();
+      }
+      // Stories: a marker before each chapter. Show progress and turn each marker into the chapter's header line.
+      if (text.includes("[[CHAPTER ")) {
+        const marks = [...text.matchAll(CHAPTER_MARKER)];
+        const m = marks[marks.length - 1];
+        if (m) setChapterProgress({ n: Number(m[1]), count: Number(m[2]), phase: (m[3] as "polish" | "trim" | undefined) ?? "writing" });
+        text = text.replace(CHAPTER_MARKER, (_all, n: string, _c, ph?: string) =>
+          ph ? "" : `\n\n${chapterHeader(Number(n), data?.project.outline?.chapters?.find((c) => c.n === Number(n))?.title ?? "", locale)}\n\n`,
+        );
+        text = [before, text.trim()].filter(Boolean).join("\n\n");
+      }
+      // Each follow-up pass (natural speech, then trim if too long) replaces the text as it streams in.
+      const polish = text.lastIndexOf("[[POLISH]]");
+      if (polish >= 0) {
+        const passes = text.split("[[POLISH]]").length - 1;
+        if (mode === "write") setPhase(passes >= 2 || !polishOn ? "trimming" : "polishing");
+        if (passes !== passesSeen) {
+          passesSeen = passes;
+          // Rewrite modes send one marker up front; in "write" each marker starts a new pass (a trim adds one).
+          const step = mode === "write" ? passes + 1 : 1;
+          // The first pass keeps the job's start time (so a reattached page shows the real elapsed time).
+          const at = step === 1 ? since : Date.now();
+          setProgress((p) => ({ step, total: Math.max(p?.total ?? 1, step), since: at, gotText: false }));
+        }
+        text = text.slice(polish + "[[POLISH]]".length).trimStart();
+      }
+      if (text) {
+        setDraft(text);
+        setProgress((p) => (p && !p.gotText ? { ...p, gotText: true } : p));
+      }
+    };
+
     try {
-      const res = await fetch(`/api/projects/${id}/script-stream${mode === "write" ? "" : `?mode=${mode}`}`, { method: "POST" });
-      const reader = res.body!.getReader();
-      const dec = new TextDecoder();
-      let raw = "";
+      const jobId = await start();
       for (;;) {
-        const { value, done } = await reader.read();
-        if (done) break;
-        raw += dec.decode(value, { stream: true });
-        let text = raw;
-        const err = text.indexOf("[[ERROR]]");
-        if (err >= 0) {
-          setStreamError(text.slice(err + 9).trim());
-          text = text.slice(0, err).trimEnd();
+        if (followed.current !== token) break; // left the page; the job carries on
+        const { job } = await api<{ job: ScriptJob | null }>(`/api/projects/${id}/script-stream`);
+        if (!job || job.id !== jobId) break;
+        apply(job.output ?? "");
+        if (job.status !== "running") {
+          if (job.status === "error" && !(job.output ?? "").includes("[[ERROR]]")) setStreamError(job.error ?? "Failed");
+          break;
         }
-        // Stories: a marker before each chapter. Show progress and turn each marker into the chapter's header line.
-        if (text.includes("[[CHAPTER ")) {
-          const marks = [...text.matchAll(CHAPTER_MARKER)];
-          const m = marks[marks.length - 1];
-          if (m) setChapterProgress({ n: Number(m[1]), count: Number(m[2]), phase: (m[3] as "polish" | "trim" | undefined) ?? "writing" });
-          text = text.replace(CHAPTER_MARKER, (_all, n: string, _c, ph?: string) =>
-            ph ? "" : `\n\n${chapterHeader(Number(n), data?.project.outline?.chapters?.find((c) => c.n === Number(n))?.title ?? "", locale)}\n\n`,
-          );
-          text = [before, text.trim()].filter(Boolean).join("\n\n");
-        }
-        // Each follow-up pass (natural speech, then trim if too long) replaces the text as it streams in.
-        const polish = text.lastIndexOf("[[POLISH]]");
-        if (polish >= 0) {
-          const passes = text.split("[[POLISH]]").length - 1;
-          if (mode === "write") setPhase(passes >= 2 || !polishOn ? "trimming" : "polishing");
-          if (passes !== passesSeen) {
-            passesSeen = passes;
-            // Rewrite modes send one marker up front; in "write" each marker starts a new pass (a trim adds one).
-            const step = mode === "write" ? passes + 1 : 1;
-            setProgress((p) => ({ step, total: Math.max(p?.total ?? 1, step), since: Date.now(), gotText: false }));
-          }
-          text = text.slice(polish + "[[POLISH]]".length).trimStart();
-        }
-        if (text) {
-          setDraft(text);
-          setProgress((p) => (p && !p.gotText ? { ...p, gotText: true } : p));
-        }
+        await new Promise((r) => setTimeout(r, 1000));
       }
     } catch (e) {
-      setStreamError(String(e));
-    } finally {
-      // Show exactly what was saved (e.g. if a polish pass was discarded).
-      const fresh = await qc.fetchQuery({ queryKey: ["project", id], queryFn: () => api<ProjectData>(`/api/projects/${id}`) });
-      setDraft(fresh.project.script ?? "");
-      setStreaming(false);
-      setPhase(null);
-      setProgress(null);
-      setChapterProgress(null);
+      if (followed.current === token) setStreamError(e instanceof Error ? e.message : String(e));
     }
+    if (followed.current !== token) return;
+    followed.current = null;
+    // Show exactly what was saved (e.g. if a polish pass was discarded).
+    const fresh = await qc.fetchQuery({ queryKey: ["project", id], queryFn: () => api<ProjectData>(`/api/projects/${id}`) });
+    setDraft(fresh.project.script ?? "");
+    setStreaming(false);
+    setPhase(null);
+    setProgress(null);
+    setChapterProgress(null);
   }
+
+  // Coming back to the page while a script job is still running: pick it up again.
+  useEffect(() => {
+    if (!data || attached.current) return;
+    attached.current = true;
+    const job = runningJob(data, "script");
+    if (!job || followed.current) return;
+    const mode = (SCRIPT_MODES as readonly string[]).includes(job.message ?? "") ? (job.message as ScriptMode) : "write";
+    void follow(mode, "", Date.parse(job.createdAt) || Date.now(), async () => job.id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [data]);
+
+  // Stop polling when you leave the page (the job itself keeps running). Resetting `attached` lets a
+  // remount (React's dev double-mount, or coming back) reattach to the job.
+  useEffect(
+    () => () => {
+      followed.current = null;
+      attached.current = false;
+    },
+    [],
+  );
 
   if (!data || !profile) return <Spinner />;
   const outline = data.project.outline;

@@ -173,6 +173,8 @@ export const jobs = sqliteTable("jobs", {
   error: text("error"),
   // pid of the server process running the job; used to detect orphans after a restart.
   owner: integer("owner"),
+  // Live text of a script-writing job (with its stream markers), so the Script page can reattach after you leave it.
+  output: text("output"),
   createdAt: text("created_at").notNull().$defaultFn(now),
   finishedAt: text("finished_at"),
 });
