@@ -90,6 +90,7 @@ export function normalizeProfile(input: ChannelProfile | ProfileV1): ChannelProf
       wordsPerMinute: wpm,
       sentencesPerImage: clamp(Math.round(pace.sentencesPerImage) || 2, 1, 4),
       cameraCuts: pace.cameraCuts !== false,
+      textFrames: pace.textFrames !== false,
       ...(measuredWpm ? { measuredWpm } : {}),
     },
     outlineTemplate: {

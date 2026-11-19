@@ -15,7 +15,7 @@ import { approveScript, restoreVersion, factCheck, generateOutline, rewriteParag
 import { activeVoiceId, overrideVoiceId, paragraphsNeedingVoice, setPause, setVoiceOverride, startVoiceJob, makeVoiceChannelDefault } from "@/lib/pipeline/voice";
 import { ttsBackend } from "@/lib/tts/provider";
 import { autopilotState, continueAutopilot, startAutopilot, stopAutopilot } from "@/lib/pipeline/autopilot";
-import { mergeWithPrevious, scenePrompt, splitScene, startPlanScenesJob, updateScene } from "@/lib/pipeline/scenes";
+import { mergeWithPrevious, removeScene, scenePrompt, splitScene, startPlanScenesJob, updateScene } from "@/lib/pipeline/scenes";
 import { approveAllImages, startImagesJob } from "@/lib/pipeline/images";
 import { buildRenderProps, setTiming, startRenderJob } from "@/lib/pipeline/render";
 import { generateAdScript, removeProductImage, setVoiceMode, shuffleVariant, updateBrief } from "@/lib/pipeline/product-ad";
@@ -204,6 +204,9 @@ export const POST = handler(async (req: Request, ctx: Ctx) => {
 
     // Preview & render
     case "videoProps":
+    case "removeScene":
+      removeScene(b.sceneId);
+      return ok();
       return ok({ props: buildRenderProps(id, { showCaptions: Boolean(b.showCaptions), kenBurns: b.kenBurns !== false, preview: true }).props });
     case "setTiming":
       setTiming(id, { visualLeadMs: b.visualLeadMs, playbackRate: b.playbackRate });

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useParams } from "next/navigation";
-import { ChevronDown, Download, LayoutGrid, Merge, Scissors, Sparkles } from "lucide-react";
+import { ChevronDown, Download, LayoutGrid, Merge, Scissors, Sparkles, Trash2 } from "lucide-react";
 import { lastJob, runningJob, useProject, useProjectAction, type ProjectData } from "@/lib/client";
 import { checkSceneCoverage } from "@/lib/sync";
 import { pacingOf } from "@/lib/channel";
@@ -149,17 +149,24 @@ function SceneRow({ data, scene }: { data: ProjectData; scene: ProjectData["scen
             </div>
           ))}
         </div>
-        {scene.idx > 0 ? (
-          <Button
-            size="sm"
-            variant="ghost"
-            className="mt-2 -ml-2"
-            icon={<Merge className="size-3.5" />}
-            onClick={() => act.mutate({ action: "mergeScene", sceneId: scene.id })}
-          >
-            {t("media.scenes.mergePrevious")}
-          </Button>
-        ) : null}
+        <div className="mt-2 -ml-2 flex flex-wrap gap-1">
+          {scene.idx > 0 ? (
+            <Button size="sm" variant="ghost" icon={<Merge className="size-3.5" />} onClick={() => act.mutate({ action: "mergeScene", sceneId: scene.id })}>
+              {t("media.scenes.mergePrevious")}
+            </Button>
+          ) : null}
+          {textOnly && data.scenes.length > 1 ? (
+            <Button
+              size="sm"
+              variant="ghost"
+              icon={<Trash2 className="size-3.5" />}
+              title={t(scene.idx > 0 ? "media.scenes.removeTextHelpPrev" : "media.scenes.removeTextHelpNext")}
+              onClick={() => act.mutate({ action: "removeScene", sceneId: scene.id })}
+            >
+              {t("media.scenes.removeText")}
+            </Button>
+          ) : null}
+        </div>
       </div>
 
       <div className="min-w-0 space-y-2.5">

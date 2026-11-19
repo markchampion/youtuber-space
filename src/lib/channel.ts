@@ -10,11 +10,13 @@ export type Pacing = {
   wordsPerMinute: number; // duration estimates
   sentencesPerImage: number; // how many sentences share one generated image
   cameraCuts: boolean; // cut to a new framing of the image at every sentence
+  /** Let the scene planner use text-only frames (big text on plain paper). Missing means yes. */
+  textFrames?: boolean;
   /** Real speaking speed of the channel's voice, measured from the last voiced video. Cleared when the voice or its speed changes. */
   measuredWpm?: number;
 };
 
-export const DEFAULT_PACING: Pacing = { maxWordsPerSentence: 14, wordsPerMinute: 170, sentencesPerImage: 2, cameraCuts: true };
+export const DEFAULT_PACING: Pacing = { maxWordsPerSentence: 14, wordsPerMinute: 170, sentencesPerImage: 2, cameraCuts: true, textFrames: true };
 export type Background = { key: string; label: string; description: string; mood: string };
 export type FrameType = { key: string; label: string; description: string; textOnly?: boolean };
 

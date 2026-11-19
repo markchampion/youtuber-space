@@ -12,7 +12,17 @@ describe("pacing & templates", () => {
     expect(p.pacing).toEqual(DEFAULT_PACING);
     expect(p.outlineTemplate?.name).toBe("Story mystery explainer");
     const q = normalizeProfile({ ...seed, pacing: { maxWordsPerSentence: 1, wordsPerMinute: 999, sentencesPerImage: 9, cameraCuts: false } });
-    expect(q.pacing).toEqual({ maxWordsPerSentence: 5, wordsPerMinute: 260, sentencesPerImage: 4, cameraCuts: false });
+    expect(q.pacing).toEqual({ maxWordsPerSentence: 5, wordsPerMinute: 260, sentencesPerImage: 4, cameraCuts: false, textFrames: true });
+  });
+
+  it("text-only frames can be turned off for the scene planner", () => {
+    const on = scenesPrompt(normalizeProfile(seed), "0: Hi.", 1);
+    expect(on).toContain("- concept_text:");
+    const off = normalizeProfile({ ...seed, pacing: { ...DEFAULT_PACING, textFrames: false } });
+    expect(off.pacing?.textFrames).toBe(false);
+    const prompt = scenesPrompt(off, "0: Hi.", 1);
+    expect(prompt).not.toContain("- concept_text:");
+    expect(prompt).toContain("never plan a text-only frame");
   });
 
   it("the outline prompt lists every template part in order, plus the casual-viewer rules", () => {

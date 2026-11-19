@@ -203,6 +203,18 @@ export function ProfileEditor({ value: p, onChange }: Props) {
               <span className="block text-xs text-stone-500">{t("channel.profile.pacing.cameraCutsHelp")}</span>
             </span>
           </label>
+          <label className="flex items-start gap-2 pt-6 text-sm">
+            <input
+              type="checkbox"
+              className="mt-0.5 size-4 accent-orange-500"
+              checked={pace.textFrames !== false}
+              onChange={(e) => set("pacing", { ...pace, textFrames: e.target.checked })}
+            />
+            <span>
+              {t("channel.profile.pacing.textFrames")}
+              <span className="block text-xs text-stone-500">{t("channel.profile.pacing.textFramesHelp")}</span>
+            </span>
+          </label>
         </div>
       </Advanced>
 

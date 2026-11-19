@@ -7,19 +7,19 @@ import { claudeJSON } from "@/lib/ai/claude";
 import { channelBrief, scenesPrompt } from "@/lib/ai/prompts";
 import { buildImagePrompt } from "@/lib/ai/prompts/image";
 import { adBrief, adScenesPrompt } from "@/lib/ai/prompts/ad";
-import { isAdChannel } from "@/lib/channel";
+import { isAdChannel, pacingOf } from "@/lib/channel";
 import { previousVideos } from "./products";
 import { ScenePlanSchema, type ScenePlan } from "@/lib/types";
 import { normalizeSceneRanges } from "@/lib/sync";
 import { claudeLimit, startJob } from "@/lib/jobs/queue";
 import { getChannel, getProject, markChanged, markStale, scenesOf, sentencesOf, updateProject } from "./common";
 
-function dryPlan(n: number): ScenePlan {
+function dryPlan(n: number, textFrames: boolean): ScenePlan {
   const scenes: ScenePlan["scenes"] = [];
   const bgs = ["prehistoric", "outdoor", "neutral", "night", "deep_night", "hardship"];
   for (let i = 0, k = 0; i < n; k++) {
     const to = Math.min(n - 1, i + (k % 3));
-    const textOnly = k % 5 === 1;
+    const textOnly = textFrames && k % 5 === 1;
     scenes.push({
       fromSentence: i,
       toSentence: to,
@@ -73,7 +73,7 @@ export function startPlanScenesJob(projectId: string) {
     const plan = env.dryRun
       ? ad
         ? dryAdPlan(sentences.length, p.variantHint)
-        : dryPlan(sentences.length)
+        : dryPlan(sentences.length, pacingOf(channel.profile).textFrames !== false)
       : ad
         ? // Ad batches plan many videos at once: share the Claude rate limit.
           await claudeLimit(() =>
@@ -96,7 +96,9 @@ export function startPlanScenesJob(projectId: string) {
           });
 
     const valid = new Set(channel.profile.visual.backgrounds.map((b) => b.key));
-    const frames = new Set(channel.profile.visual.frameTypes.map((f) => f.key));
+    // With text frames off, a text-only pick from the model falls back to an image frame.
+    const textFrames = pacingOf(channel.profile).textFrames !== false;
+    const frames = new Set(channel.profile.visual.frameTypes.filter((f) => textFrames || !f.textOnly).map((f) => f.key));
     const fallbackFrame = ad ? (channel.profile.visual.frameTypes.find((f) => !f.textOnly)?.key ?? "product_hero") : "character_scene";
     const scenes = normalizeSceneRanges(plan.scenes, sentences.length);
     db.transaction((tx) => {
@@ -181,6 +183,27 @@ export function mergeWithPrevious(sceneId: string) {
   const prev = scenesOf(s.projectId).find((x) => x.idx === s.idx - 1)!;
   db.transaction((tx) => {
     tx.update(schema.scenes).set({ toSentence: s.toSentence }).where(eq(schema.scenes.id, prev.id)).run();
+    tx.delete(schema.scenes).where(eq(schema.scenes.id, s.id)).run();
+    tx.update(schema.scenes)
+      .set({ idx: sql`${schema.scenes.idx} - 1` })
+      .where(and(eq(schema.scenes.projectId, s.projectId), gt(schema.scenes.idx, s.idx)))
+      .run();
+  });
+  markChanged(s.projectId, "scenes");
+}
+
+/**
+ * Remove a scene, handing its sentences to a neighbour so every sentence stays covered:
+ * the previous scene, or the next one when this is the first scene. The neighbour's visuals win.
+ */
+export function removeScene(sceneId: string) {
+  const s = db.select().from(schema.scenes).where(eq(schema.scenes.id, sceneId)).get();
+  if (!s) throw new Error("Scene not found");
+  if (s.idx > 0) return mergeWithPrevious(sceneId);
+  const next = scenesOf(s.projectId).find((x) => x.idx === 1);
+  if (!next) throw new Error("A video needs at least one scene");
+  db.transaction((tx) => {
+    tx.update(schema.scenes).set({ fromSentence: s.fromSentence }).where(eq(schema.scenes.id, next.id)).run();
     tx.delete(schema.scenes).where(eq(schema.scenes.id, s.id)).run();
     tx.update(schema.scenes)
       .set({ idx: sql`${schema.scenes.idx} - 1` })

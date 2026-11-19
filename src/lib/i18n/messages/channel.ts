@@ -137,6 +137,8 @@ export const en = {
       sentencesPerImageHint: "1 = new image every sentence (costs more)",
       cameraCuts: "Camera cut at every sentence",
       cameraCutsHelp: "Zooms to another part of the same image, so the picture changes without generating more images.",
+      textFrames: "Use text-only scenes",
+      textFramesHelp: "Big text on plain paper for numbers and key terms. Turn off to make every scene an image (takes effect on the next scene plan).",
     },
     writing: {
       title: "Writing rules",
@@ -415,6 +417,8 @@ export const vi: Translation<typeof en> = {
       sentencesPerImageHint: "1 = hình ảnh mới cho mỗi câu (tốn chi phí hơn)",
       cameraCuts: "Chuyển góc máy ở mỗi câu",
       cameraCutsHelp: "Phóng tới một vùng khác của cùng hình ảnh, để khung hình thay đổi mà không cần tạo thêm hình.",
+      textFrames: "Dùng cảnh chỉ có chữ",
+      textFramesHelp: "Chữ lớn trên nền giấy cho con số và từ khóa. Tắt để mọi cảnh đều là hình ảnh (áp dụng từ lần lên cảnh tiếp theo).",
     },
     writing: {
       title: "Quy tắc viết",

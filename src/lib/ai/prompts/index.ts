@@ -231,7 +231,11 @@ In "note", say precisely what to check or what's wrong.`;
 
 export function scenesPrompt(p: ChannelProfile, numbered: string, sentenceCount: number) {
   const bgs = p.visual.backgrounds.map((b) => `- ${b.key}: ${b.description} (use for: ${b.mood})`).join("\n");
-  const frames = p.visual.frameTypes.map((f) => `- ${f.key}: ${f.description}`).join("\n");
+  const textFrames = pacingOf(p).textFrames !== false;
+  const frames = p.visual.frameTypes
+    .filter((f) => textFrames || !f.textOnly)
+    .map((f) => `- ${f.key}: ${f.description}`)
+    .join("\n");
   return `Plan the visuals for this narrated video. The script is split into ${sentenceCount} numbered sentences (0-based):
 
 <sentences>
@@ -251,7 +255,7 @@ background must be one of these keys (match the emotional tone):
 ${bgs}
 
 onScreenText: a short phrase or number in the channel's language (ALL CAPS if the script has capitals) when the frame benefits from it (e.g. "300,000 YEARS", "SURVIVAL"), otherwise "". It is overlaid by code later, so NEVER put words in the description.
-For concept_text frames the image is not generated at all — only onScreenText is shown — so use them for numbers and key terms.
+${textFrames ? "For concept_text frames the image is not generated at all — only onScreenText is shown — so use them for numbers and key terms." : "Every scene is a drawn image: never plan a text-only frame. Put numbers and key terms in onScreenText over an image that shows them."}
 
 description (always in English, for the image model): concrete and specific — who is in the frame (for every person, name which character or variant it is and restate their defining look from the channel's character description), their exact expression and action, the objects, and composition. Keep the important content in the middle of the frame. Do NOT include style words (the style is added automatically) and do NOT describe any text, letters or labels.`;
 }
