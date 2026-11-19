@@ -5,7 +5,7 @@ import { mediaUrl } from "@/lib/media";
 import { projectCost } from "@/lib/costs";
 import { getActiveChannel, scenesOf } from "@/lib/pipeline/common";
 import { autopilotState } from "@/lib/pipeline/autopilot";
-import { channelKind, isDrama } from "@/lib/channel";
+import { channelKind, isDrama, storyFormatOf } from "@/lib/channel";
 
 export const dynamic = "force-dynamic";
 
@@ -28,7 +28,7 @@ export const GET = handler(async (req: Request) => {
       .filter((j) => j.projectId && j.type !== "autopilot")
       .map((j) => [j.projectId!, { type: j.type.split(":")[0], progress: j.progress, message: j.message }]),
   );
-  const channels = new Map(db.select().from(schema.channels).all().map((c) => [c.id, { name: c.name, kind: channelKind(c.profile), drama: isDrama(c.profile) }]));
+  const channels = new Map(db.select().from(schema.channels).all().map((c) => [c.id, { name: c.name, kind: channelKind(c.profile), drama: isDrama(c.profile) && storyFormatOf(c.profile) === "episodes" }]));
   const titles = new Map(rows.map((p) => [p.id, p.title]));
   return Response.json({
     channel: { id: active.id, name: active.name, kind: channelKind(active.profile) },

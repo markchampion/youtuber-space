@@ -3,7 +3,7 @@ import { ANCIENT_HUMANS_PROFILE as seed } from "./channel-seed";
 import { normalizeProfile } from "./channel-normalize";
 import { genreOf, type ChannelProfile } from "./channel";
 import { DRAMA_OUTLINE_TEMPLATE, chapterOfKey, expandDramaTemplate } from "./outline-templates";
-import { CASUAL_RULES, DRAMA_RULES, FICTION_RULE, channelBrief, outlinePrompt, scriptChapterPrompt, scriptPrompt } from "./ai/prompts";
+import { CASUAL_RULES, DRAMA_RULES, FICTION_RULE, chapterBudget, channelBrief, outlinePrompt, scriptChapterPrompt, scriptPrompt, suggestedChapters } from "./ai/prompts";
 import type { Outline } from "./types";
 
 const { outlineTemplate: _t, ...noTemplate } = seed;
@@ -72,5 +72,43 @@ describe("expandDramaTemplate", () => {
   it("keeps keys unique", () => {
     const keys = expandDramaTemplate(DRAMA_OUTLINE_TEMPLATE, 6).beats.map((b) => b.key);
     expect(new Set(keys).size).toBe(keys.length);
+  });
+});
+
+describe("whole story as one video", () => {
+  const single: ChannelProfile = normalizeProfile({ ...noTemplate, genre: "drama", storyFormat: "single", language: "vi", lengthMinutes: { min: 25, max: 30 } });
+
+  it("defaults to one video per chapter", () => {
+    expect(drama.storyFormat).toBe("episodes");
+    expect(single.storyFormat).toBe("single");
+  });
+
+  it("shares the channel length between chapters", () => {
+    expect(suggestedChapters(single)).toBe(3);
+    expect(chapterBudget(single, 3).targetWords).toBe(Math.round(chapterBudget(single, 1).targetWords / 3));
+    expect(chapterBudget(drama, 5).targetWords).toBe(chapterBudget(drama, 1).targetWords);
+  });
+
+  it("writes chapters that flow into each other, without per-part recaps or CTAs", () => {
+    const o = outlinePrompt(single, "T");
+    expect(o).toContain("ONE video");
+    const mid = scriptChapterPrompt(single, "T", outline, 2, 3, "x");
+    expect(mid).not.toContain("Ở phần trước");
+    expect(mid).toContain("No call to action here");
+    expect(scriptChapterPrompt(single, "T", outline, 3, 3, "x")).toContain("This is the last chapter");
+  });
+});
+
+describe("opening hook", () => {
+  it("every story starts with a hook beat, before the cold open", () => {
+    const keys = expandDramaTemplate(DRAMA_OUTLINE_TEMPLATE, 3).beats.map((b) => b.key);
+    expect(keys.slice(0, 2)).toEqual(["c1_hook", "c1_cold_open"]);
+    expect(DRAMA_RULES).toContain("HOOK");
+  });
+
+  it("chapter 1 opens with the hook; separate part videos get their own hook before the recap", () => {
+    expect(scriptChapterPrompt(drama, "T", outline, 1, 3, "")).toContain("The very first sentences are the hook");
+    const part2 = scriptChapterPrompt(drama, "T", outline, 2, 3, "x");
+    expect(part2.indexOf("hook")).toBeLessThan(part2.indexOf("Ở phần trước"));
   });
 });

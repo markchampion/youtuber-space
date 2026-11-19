@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { ChevronRight, Sparkles } from "lucide-react";
 import { api } from "@/lib/client";
-import { genreOf, lengthBudget, onScreenFont, pacingOf, polishEnabled, textColors, type ChannelGenre, type ChannelProfile } from "@/lib/channel";
+import { genreOf, lengthBudget, onScreenFont, pacingOf, polishEnabled, storyFormatOf, textColors, type ChannelGenre, type ChannelProfile, type StoryFormat } from "@/lib/channel";
 import { defaultTemplateFor } from "@/lib/outline-templates";
 import { handFont } from "@/remotion/shared";
 import { OutlineTemplateEditor } from "./outline-template-editor";
@@ -64,7 +64,7 @@ export function ProfileEditor({ value: p, onChange }: Props) {
             <Input value={p.name} onChange={(e) => set("name", e.target.value)} />
           </div>
           <div>
-            <Label hint={t("channel.profile.essentials.minutes")}>{t(genreOf(p) === "drama" ? "channel.profile.essentials.videoLengthDrama" : "channel.profile.essentials.videoLength")}</Label>
+            <Label hint={t("channel.profile.essentials.minutes")}>{t(genreOf(p) === "drama" && storyFormatOf(p) === "episodes" ? "channel.profile.essentials.videoLengthDrama" : "channel.profile.essentials.videoLength")}</Label>
             <div className="flex items-center gap-1.5">
               <Input
                 type="number"
@@ -127,6 +127,15 @@ export function ProfileEditor({ value: p, onChange }: Props) {
             <option value="drama">{t("channel.profile.essentials.genreDrama")}</option>
           </Select>
         </div>
+        {genreOf(p) === "drama" ? (
+          <div>
+            <Label hint={t("channel.profile.essentials.storyFormatHint")}>{t("channel.profile.essentials.storyFormat")}</Label>
+            <Select value={storyFormatOf(p)} onChange={(e) => set("storyFormat", e.target.value as StoryFormat)} className="max-w-xs">
+              <option value="episodes">{t("channel.profile.essentials.storyFormatEpisodes")}</option>
+              <option value="single">{t("channel.profile.essentials.storyFormatSingle")}</option>
+            </Select>
+          </div>
+        ) : null}
         {field(t("channel.profile.essentials.niche"), p.niche, (v) => set("niche", v), 3)}
         {field(t("channel.profile.essentials.narrationVoice"), p.voice, (v) => set("voice", v))}
         {field(

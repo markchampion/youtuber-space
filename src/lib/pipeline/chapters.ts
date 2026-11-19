@@ -2,7 +2,7 @@ import "server-only";
 import { and, asc, eq } from "drizzle-orm";
 import { nanoid } from "nanoid";
 import { db, schema } from "@/lib/db";
-import { isDrama } from "@/lib/channel";
+import { isDrama, storyFormatOf } from "@/lib/channel";
 import { chapterOfKey } from "@/lib/outline-templates";
 import { splitChapters } from "@/lib/chapters";
 import { slugify } from "@/lib/sync";
@@ -20,9 +20,9 @@ export type ChapterVideo = {
   updatedAt: string;
 };
 
-/** A drama project with no parent holds a whole story; its chapters become their own videos. */
-export function isStoryProject(p: { parentId: string | null }, profile: Parameters<typeof isDrama>[0]) {
-  return isDrama(profile) && !p.parentId;
+/** A drama project with no parent on an "episodes" channel holds a whole story; its chapters become their own videos. */
+export function isStoryProject(p: { parentId: string | null }, profile: Parameters<typeof isDrama>[0] & Parameters<typeof storyFormatOf>[0]) {
+  return isDrama(profile) && storyFormatOf(profile) === "episodes" && !p.parentId;
 }
 
 /** Videos made from a story's chapters, by chapter number. */

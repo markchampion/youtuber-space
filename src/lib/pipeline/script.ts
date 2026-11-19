@@ -4,11 +4,11 @@ import { nanoid } from "nanoid";
 import { db, schema } from "@/lib/db";
 import { env } from "@/lib/env";
 import { claudeJSON, claudeText } from "@/lib/ai/claude";
-import { channelBrief, continuityPrompt, factCheckPrompt, outlinePrompt, polishPrompt, rewriteParagraphPrompt, scriptChapterPrompt, scriptPrompt, shortenPrompt, templateOf, trimPrompt, type ChapterCount } from "@/lib/ai/prompts";
+import { chapterBudget, suggestedChapters, channelBrief, continuityPrompt, factCheckPrompt, outlinePrompt, polishPrompt, rewriteParagraphPrompt, scriptChapterPrompt, scriptPrompt, shortenPrompt, templateOf, trimPrompt, type ChapterCount } from "@/lib/ai/prompts";
 import { ALL_OUTLINE_TEMPLATES, chapterOfKey, expandDramaTemplate, isChapterTemplate } from "@/lib/outline-templates";
-import { joinChapters, splitChapters, type StoryChapter } from "@/lib/chapters";
+import { joinChapters, splitChapters, stripChapterHeaders, type StoryChapter } from "@/lib/chapters";
 import type { ChannelProfile, OutlineTemplate } from "@/lib/channel";
-import { isDrama, lengthBudget, needsTrim, polishEnabled } from "@/lib/channel";
+import { isDrama, lengthBudget, needsTrim, polishEnabled, storyFormatOf } from "@/lib/channel";
 import { spellOutNumbers } from "@/lib/spell-numbers";
 import { FactCheckSchema, OutlineSchema, type FactCheck, type Outline } from "@/lib/types";
 import { acceptPolish, splitParagraphs, splitSentences, wordCount } from "@/lib/sync";
@@ -55,7 +55,7 @@ export async function generateOutline(projectId: string, templateName?: string |
   const template = resolveTemplate(channel.profile, templateName);
   const outline = env.dryRun
     ? isDrama(channel.profile) && isChapterTemplate(template)
-      ? dryStoryOutline(template, chapters === "auto" ? 3 : chapters)
+      ? dryStoryOutline(template, chapters !== "auto" ? chapters : storyFormatOf(channel.profile) === "single" ? suggestedChapters(channel.profile) : 3)
       : DRY_OUTLINE
     : await claudeJSON(OutlineSchema, {
         system: channelBrief(channel.profile),
@@ -162,7 +162,7 @@ async function writeStory(projectId: string, onText: (d: string) => void, resume
       .map((c) => c.text)
       .join("\n\n");
     let text = await writeChapter(projectId, profile, p.title, outline, n, planned.length, previous, onText);
-    text = await reworkChapter(projectId, profile, text, () => onText(chapterMarker(pos, planned.length, "polish")), () => onText(chapterMarker(pos, planned.length, "trim")));
+    text = await reworkChapter(projectId, profile, text, planned.length, () => onText(chapterMarker(pos, planned.length, "polish")), () => onText(chapterMarker(pos, planned.length, "trim")));
     done.push({ n, title: chapterTitle(outline, n), text });
     save();
   }
@@ -190,7 +190,7 @@ async function writeChapter(projectId: string, profile: ChannelProfile, title: s
 }
 
 /** Per-chapter clean-up: digits to words, the natural-speech pass, and a trim when the chapter runs long. */
-async function reworkChapter(projectId: string, profile: ChannelProfile, text: string, onPolish: () => void, onTrim: () => void) {
+async function reworkChapter(projectId: string, profile: ChannelProfile, text: string, count: number, onPolish: () => void, onTrim: () => void) {
   let out = spellOutNumbers(text.trim(), profile.language);
   if (env.dryRun) return out;
   if (polishEnabled(profile)) {
@@ -198,10 +198,12 @@ async function reworkChapter(projectId: string, profile: ChannelProfile, text: s
     const polished = await claudeText({ system: channelBrief(profile), user: polishPrompt(profile, out), effort: "high", maxTokens: 32000, kind: "polish", projectId });
     if (acceptPolish(out, polished)) out = spellOutNumbers(polished.trim(), profile.language);
   }
+  // One video per chapter: the channel length is the chapter length. Whole story as one video: chapters share it.
+  const limit = chapterBudget(profile, count);
   const words = wordCount(out, profile.language);
-  if (needsTrim(words, lengthBudget(profile))) {
+  if (needsTrim(words, { ...lengthBudget(profile), maxWords: limit.maxWords })) {
     onTrim();
-    const trimmed = await claudeText({ system: channelBrief(profile), user: trimPrompt(profile, out, words), effort: "medium", maxTokens: 32000, kind: "polish", projectId });
+    const trimmed = await claudeText({ system: channelBrief(profile), user: trimPrompt(profile, out, words, limit), effort: "medium", maxTokens: 32000, kind: "polish", projectId });
     if (splitParagraphs(trimmed).length) out = trimmed.trim();
   }
   return out;
@@ -219,7 +221,7 @@ async function rewriteChapterVideo(projectId: string, onText: (d: string) => voi
     .map((c) => c.text)
     .join("\n\n");
   let text = await writeChapter(projectId, profile, story.title, outline, p.chapter!, planned.length || p.chapter!, previous, onText);
-  text = await reworkChapter(projectId, profile, text, () => onText(POLISH_MARKER), () => undefined);
+  text = await reworkChapter(projectId, profile, text, planned.length || p.chapter!, () => onText(POLISH_MARKER), () => undefined);
   saveScript(projectId, text, "ai");
   return text;
 }
@@ -361,7 +363,8 @@ export function setFactVerified(projectId: string, index: number, verified: bool
 export function approveScript(projectId: string) {
   const p = getProject(projectId);
   if (!p.script?.trim()) throw new Error("Script is empty");
-  const texts = splitParagraphs(p.script);
+  // A whole story published as one video keeps "## Chương n" lines in its text; they are never voiced.
+  const texts = splitParagraphs(stripChapterHeaders(p.script));
   const locale = getChannel(p.channelId).profile.language ?? "en";
   const old = paragraphsOf(projectId);
   const oldByText = new Map(old.map((o) => [o.text, o]));

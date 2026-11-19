@@ -139,8 +139,10 @@ function LongScriptPage() {
   const outline = data.project.outline;
   const isStory = data.story.isStory;
   const plannedChapters = outline ? [...new Set(outline.sections.map((s) => chapterOfKey(s.key)).filter((n): n is number => n != null))] : [];
-  const writtenChapters = isStory ? splitChapters(draft).filter((c) => c.text.trim()) : [];
-  const nextChapter = isStory && writtenChapters.length ? plannedChapters.find((n) => !writtenChapters.some((c) => c.n === n)) : undefined;
+  // A drama story written in chapters: a story project (one video per chapter) or a whole story published as one video.
+  const chaptered = isStory || (isDrama(profile) && !data.project.parentId && plannedChapters.length > 0);
+  const writtenChapters = chaptered ? splitChapters(draft).filter((c) => c.text.trim()) : [];
+  const nextChapter = chaptered && writtenChapters.length ? plannedChapters.find((n) => !writtenChapters.some((c) => c.n === n)) : undefined;
   const b = budget!;
   const tooLong = needsTrim(words, b);
   const wordTone = words < b.minWords * 0.9 || tooLong ? "amber" : "green";
@@ -233,7 +235,7 @@ function LongScriptPage() {
                   {t("script.story.continue", { n: nextChapter, count: plannedChapters.length })}
                 </Button>
               ) : null}
-              {!isStory && draft && tooLong ? (
+              {!chaptered && draft && tooLong ? (
                 <Button
                   variant="secondary"
                   onClick={() => writeScript("trim")}
@@ -245,7 +247,7 @@ function LongScriptPage() {
                   {streaming && phase === "trimming" ? t("script.trimming") : t("script.trim")}
                 </Button>
               ) : null}
-              {!isStory && draft && long.length ? (
+              {!chaptered && draft && long.length ? (
                 <Button
                   variant="secondary"
                   onClick={() => writeScript("shorten")}
@@ -257,7 +259,7 @@ function LongScriptPage() {
                   {streaming && phase === "shortening" ? t("script.shortening") : t("script.shorten")}
                 </Button>
               ) : null}
-              {!isStory && draft ? (
+              {!chaptered && draft ? (
                 <Button
                   variant="secondary"
                   onClick={() => writeScript("polish")}
