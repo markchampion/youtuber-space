@@ -5,6 +5,7 @@ import { LANGUAGES, getLanguage } from "./languages";
 import { normalizeProfile } from "./channel-normalize";
 import { ANCIENT_HUMANS_PROFILE } from "./channel-seed";
 import { channelBrief, languageRule, scriptPrompt } from "./ai/prompts";
+import { buildImagePrompt } from "./ai/prompts/image";
 
 describe("languages", () => {
   it("splits Vietnamese sentences and keeps offsets exact", () => {
@@ -52,6 +53,15 @@ describe("languages", () => {
     expect(en).toMatch(/contractions/);
     // Languages without a detailed guide still get the generic spoken-style rules.
     expect(languageRule({ ...ANCIENT_HUMANS_PROFILE, language: "es" })).toMatch(/native speaker talks/);
+  });
+
+  it("keeps image and scene descriptions in English for a Vietnamese channel", () => {
+    const viProfile = { ...ANCIENT_HUMANS_PROFILE, language: "vi" };
+    expect(languageRule(viProfile)).toMatch(/image or scene descriptions in English/);
+    // The image prompt is assembled from the English style rules, with no language instruction added.
+    const prompt = buildImagePrompt(viProfile, { description: "A stick figure pushes a boulder.", background: "prehistoric", frameType: "character_scene" });
+    expect(prompt).toBe(buildImagePrompt(ANCIENT_HUMANS_PROFILE, { description: "A stick figure pushes a boulder.", background: "prehistoric", frameType: "character_scene" }));
+    expect(prompt).not.toMatch(/Vietnamese|Tiếng Việt/);
   });
 
   it("includes the voice sample in the channel brief only when set", () => {

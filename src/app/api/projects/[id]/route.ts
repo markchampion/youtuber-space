@@ -12,7 +12,8 @@ import { channelKind } from "@/lib/channel";
 import { approveStep, getChannel, getProject, paragraphsOf, scenesOf, sentencesOf, updateProject } from "@/lib/pipeline/common";
 import { deleteGeneratedVideos, deleteRender, generatedVideoBytes, listRenders, listVersions } from "@/lib/pipeline/history";
 import { approveScript, restoreVersion, factCheck, generateOutline, rewriteParagraph, saveOutline, saveScript, setFactVerified } from "@/lib/pipeline/script";
-import { paragraphsNeedingVoice, setPause, setVoiceOverride, startVoiceJob, makeVoiceChannelDefault } from "@/lib/pipeline/voice";
+import { activeVoiceId, overrideVoiceId, paragraphsNeedingVoice, setPause, setVoiceOverride, startVoiceJob, makeVoiceChannelDefault } from "@/lib/pipeline/voice";
+import { ttsBackend } from "@/lib/tts/provider";
 import { autopilotState, continueAutopilot, startAutopilot, stopAutopilot } from "@/lib/pipeline/autopilot";
 import { mergeWithPrevious, scenePrompt, splitScene, startPlanScenesJob, updateScene } from "@/lib/pipeline/scenes";
 import { approveAllImages, startImagesJob } from "@/lib/pipeline/images";
@@ -48,9 +49,15 @@ export const GET = handler(async (_req: Request, ctx: Ctx) => {
     // No voice picked yet.
   }
   return Response.json({
-    project: { ...project, autopilot: autopilotState(id) },
+    // Voice ids are shown for the active provider (Settings → Voice connection).
+    project: {
+      ...project,
+      voiceOverride: project.voiceOverride ? { voiceId: overrideVoiceId(project.voiceOverride), settings: project.voiceOverride.settings ?? null } : null,
+      autopilot: autopilotState(id),
+    },
+    ttsBackend: ttsBackend(),
     product: project.product ? { ...project.product, imageUrls: project.product.imagePaths.map((rel) => mediaUrl(rel)) } : null,
-    channel: { id: channel.id, kind: channelKind(channel.profile), profile: channel.profile, voiceId: channel.voiceId, voiceSettings: channel.voiceSettings, pronunciations: channel.pronunciations, characterRefUrl: mediaUrl(channel.characterRefPath) },
+    channel: { id: channel.id, kind: channelKind(channel.profile), profile: channel.profile, voiceId: activeVoiceId(channel), voiceSettings: channel.voiceSettings, pronunciations: channel.pronunciations, characterRefUrl: mediaUrl(channel.characterRefPath) },
     paragraphs: paragraphsOf(id).map((p) => ({
       ...p,
       audioUrl: mediaUrl(p.audioPath, p.voiceHash ?? undefined),

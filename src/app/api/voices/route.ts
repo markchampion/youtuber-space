@@ -1,11 +1,13 @@
 import { handler } from "@/lib/api";
-import { addLibraryVoice, listVoices, searchLibraryVoices } from "@/lib/tts/elevenlabs";
+import { addLibraryVoice, searchLibraryVoices } from "@/lib/tts/elevenlabs";
+import { ttsBackend, ttsProvider } from "@/lib/tts/provider";
 
 export const dynamic = "force-dynamic";
 
 export const GET = handler(async (req: Request) => {
   const q = new URL(req.url).searchParams;
   if (q.get("library")) {
+    if (ttsBackend() === "local") throw new Error("The voice library is for ElevenLabs. Switch Settings → Voice connection to API key to browse it.");
     return Response.json(
       await searchLibraryVoices({
         language: q.get("language") || "en",
@@ -16,7 +18,7 @@ export const GET = handler(async (req: Request) => {
       }),
     );
   }
-  return Response.json({ voices: await listVoices() });
+  return Response.json({ backend: ttsBackend(), voices: await ttsProvider().listVoices() });
 });
 
 export const POST = handler(async (req: Request) => {

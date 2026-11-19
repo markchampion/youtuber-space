@@ -12,7 +12,8 @@
   --color-foreground: var(--foreground);
   --color-brand: var(--brand);
   --color-brand-ink: var(--brand-ink);
-  --font-sans: var(--font-geist-sans);
+  /* Be Vietnam Pro fills in Vietnamese letters Geist lacks (e.g. a Vietnamese script in an English UI). */
+  --font-sans: var(--font-geist-sans), var(--font-vietnamese), ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono);
   --font-marker: var(--font-marker);
 }
@@ -25,4 +26,9 @@ body {
 /* Keep native range inputs on-brand */
 input[type="range"] {
   accent-color: var(--brand);
+}
+
+/* Vietnamese app UI: one face for whole words instead of mixing Geist and fallback glyphs. */
+html[data-ui-lang="vi"] .font-sans {
+  font-family: var(--font-vietnamese), ui-sans-serif, system-ui, sans-serif;
 }

@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ChevronsUpDown, Plus } from "lucide-react";
 import { api } from "@/lib/client";
+import { useT } from "@/lib/i18n";
 import { cn } from "./ui";
 
 type ChannelRow = { id: string; name: string; avatarUrl: string | null; kind: "longform" | "product_ad"; language: string; videos: number; active: boolean };
@@ -14,6 +15,7 @@ export function useChannels() {
 }
 
 export function ChannelSwitcher() {
+  const t = useT();
   const qc = useQueryClient();
   const { data } = useChannels();
   const [open, setOpen] = useState(false);
@@ -48,18 +50,18 @@ export function ChannelSwitcher() {
         aria-haspopup="listbox"
         aria-expanded={open}
         className="flex h-8 max-w-[220px] items-center gap-1.5 rounded-md px-2.5 text-sm font-medium text-stone-800 ring-1 ring-stone-300 hover:bg-white"
-        title="Switch channel"
+        title={t("nav.channels.switchTitle")}
       >
         {active?.avatarUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={active.avatarUrl} alt="" className="size-5 shrink-0 rounded-full object-cover ring-1 ring-stone-200" />
         ) : null}
-        <span className="truncate">{active?.name ?? "Channel"}</span>
+        <span className="truncate">{active?.name ?? t("nav.channels.fallback")}</span>
         <ChevronsUpDown className="size-3.5 shrink-0 text-stone-500" />
       </button>
       {open ? (
         <div className="absolute left-0 top-10 z-40 w-72 rounded-xl bg-white p-1.5 shadow-lg ring-1 ring-stone-200" role="listbox">
-          <div className="px-2.5 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-stone-500">Channels</div>
+          <div className="px-2.5 pb-1 pt-1.5 text-[11px] font-semibold uppercase tracking-wide text-stone-500">{t("nav.channels.heading")}</div>
           {data?.channels.map((c) => (
             <button
               key={c.id}
@@ -75,10 +77,12 @@ export function ChannelSwitcher() {
                 <span className="size-5 shrink-0 rounded-full bg-stone-200" />
               )}
               <span className="min-w-0 flex-1 truncate">{c.name}</span>
-              {c.kind === "product_ad" ? <span className="rounded bg-rose-50 px-1 text-[10px] font-semibold uppercase text-rose-700">Ad</span> : null}
+              {c.kind === "product_ad" ? <span className="rounded bg-rose-50 px-1 text-[10px] font-semibold uppercase text-rose-700">{t("nav.channels.adBadge")}</span> : null}
               <span className="rounded bg-stone-100 px-1 text-[10px] font-semibold uppercase text-stone-500">{c.language}</span>
               <span className="text-xs text-stone-500">
-                {c.videos} {c.kind === "product_ad" ? "ad" : "video"}{c.videos === 1 ? "" : "s"}
+                {c.kind === "product_ad"
+                  ? t(c.videos === 1 ? "nav.channels.adsOne" : "nav.channels.adsOther", { count: c.videos })
+                  : t(c.videos === 1 ? "nav.channels.videosOne" : "nav.channels.videosOther", { count: c.videos })}
               </span>
               {c.active ? <Check className="size-4 text-emerald-600" /> : <span className="size-4" />}
             </button>
@@ -89,7 +93,7 @@ export function ChannelSwitcher() {
             onClick={() => setOpen(false)}
             className="flex items-center gap-2 rounded-lg px-2.5 py-2 text-sm font-medium text-brand-ink hover:bg-orange-50"
           >
-            <Plus className="size-4" /> New channel
+            <Plus className="size-4" /> {t("nav.channels.newChannel")}
           </Link>
         </div>
       ) : null}

@@ -6,6 +6,7 @@ import { env, modelFor } from "@/lib/env";
 import { cliPing } from "@/lib/ai/claude-cli";
 import { codexPing } from "@/lib/ai/codex-text";
 import { CodexImageProvider } from "@/lib/image/codex";
+import { pingLocal } from "@/lib/tts/provider";
 
 /** Checks the saved key with a cheap, read-only call (no generation, no cost). */
 export const POST = handler(async (req: Request) => {
@@ -27,6 +28,8 @@ export const POST = handler(async (req: Request) => {
         await new OpenAI({ apiKey: env.openaiKey, maxRetries: 0 }).models.retrieve(env.imageModel);
         return Response.json({ ok: true, message: `Connected. ${env.imageModel} is available.` });
       }
+      case "LOCAL_TTS":
+        return Response.json({ ok: true, message: await pingLocal() });
       case "CLAUDE_CLI": {
         const t = Date.now();
         const reply = await cliPing(modelFor("ideas"));

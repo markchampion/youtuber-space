@@ -4,24 +4,26 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useChannel } from "@/lib/client";
 import { isAdChannel } from "@/lib/channel";
+import { useT, type TKey } from "@/lib/i18n";
 import { ChannelSwitcher } from "./channel-switcher";
 import { cn } from "./ui";
 
-const LINKS = [
-  { href: "/", label: "Videos" },
-  { href: "/ideas", label: "Ideas" },
-  { href: "/channel", label: "Channel" },
-  { href: "/settings", label: "Settings" },
+const LINKS: { href: string; label: TKey }[] = [
+  { href: "/", label: "nav.links.videos" },
+  { href: "/ideas", label: "nav.links.ideas" },
+  { href: "/channel", label: "nav.links.channel" },
+  { href: "/settings", label: "nav.links.settings" },
 ];
 
 export function TopNav() {
+  const t = useT();
   const path = usePathname();
   const { data } = useChannel();
   const keys = data?.keys;
   // Product-ad channels start from a product brief, not from ideas.
   const ad = data ? isAdChannel(data.channel.profile) : false;
   const links = ad
-    ? LINKS.flatMap((l) => (l.href === "/ideas" ? [{ href: "/products", label: "Products" }, { href: "/ads/new", label: "New ad" }] : [l]))
+    ? LINKS.flatMap((l) => (l.href === "/ideas" ? [{ href: "/products", label: "nav.links.products" as TKey }, { href: "/ads/new", label: "nav.links.newAd" as TKey }] : [l]))
     : LINKS;
   const missing = keys && !keys.dryRun ? (["anthropic", "elevenlabs", "openai"] as const).filter((k) => !keys[k]) : [];
 
@@ -47,7 +49,7 @@ export function TopNav() {
                   active ? "bg-stone-900 text-white" : "text-stone-600 hover:bg-stone-200/60 hover:text-stone-900",
                 )}
               >
-                {l.label}
+                {t(l.label)}
               </Link>
             );
           })}
@@ -57,18 +59,18 @@ export function TopNav() {
             <Link
               href="/settings"
               className="rounded-full bg-amber-100 px-2.5 py-1 font-medium text-amber-900 hover:bg-amber-200"
-              title="Placeholder text, audio and images. No API calls, no cost. Click to change."
+              title={t("nav.dryRunTitle")}
             >
-              Dry run
+              {t("nav.dryRun")}
             </Link>
           ) : null}
           {missing.length ? (
             <Link
               href="/settings"
               className="rounded-full bg-red-50 px-2.5 py-1 font-medium text-red-700 ring-1 ring-red-200 hover:bg-red-100"
-              title="Add the missing keys in Settings"
+              title={t("nav.missingKeyTitle")}
             >
-              Missing key: {missing.join(", ")}
+              {t("nav.missingKey", { keys: missing.join(", ") })}
             </Link>
           ) : null}
         </div>

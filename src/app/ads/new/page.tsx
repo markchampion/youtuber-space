@@ -1,6 +1,6 @@
 "use client";
 
-import { Suspense, useState } from "react";
+import { Fragment, Suspense, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
@@ -10,8 +10,14 @@ import { isAdChannel } from "@/lib/channel";
 import type { VoiceMode } from "@/lib/types";
 import { EMPTY_DRAFT, PhotoStrip, ProductFields, VoiceModeToggle, briefOf, draftReady, useLocalPhotos, type BriefDraft } from "@/components/product-fields";
 import { Button, Card, EmptyState, ErrorNote, Label, Spinner, Tabs, cn } from "@/components/ui";
+import { useT } from "@/lib/i18n";
 
 type Source = "saved" | "new";
+
+/** Fills `{name}` slots of a translated sentence with React nodes (e.g. a link). */
+function rich(text: string, parts: Record<string, ReactNode>): ReactNode {
+  return text.split(/\{(\w+)\}/).map((s, i) => (i % 2 ? <Fragment key={i}>{parts[s] ?? `{${s}}`}</Fragment> : s));
+}
 
 export default function NewAdPage() {
   // useSearchParams needs a Suspense boundary.
@@ -26,6 +32,7 @@ function NewAd() {
   const router = useRouter();
   const params = useSearchParams();
   const qc = useQueryClient();
+  const t = useT();
   const { data } = useChannel();
   const ad = data ? isAdChannel(data.channel.profile) : false;
   const products = useProducts(ad);
@@ -64,12 +71,14 @@ function NewAd() {
   if (!ad) {
     return (
       <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
-        <EmptyState icon={<ImagePlus className="size-8" />} title="Switch to a product-ad channel">
-          {data.channel.name} makes long-form videos. Pick a product-ad channel in the channel menu, or{" "}
-          <Link href="/channel/new" className="font-medium text-brand-ink underline">
-            create one
-          </Link>
-          .
+        <EmptyState icon={<ImagePlus className="size-8" />} title={t("products.newAd.notAdTitle")}>
+          {rich(t("products.newAd.notAdBody", { channel: data.channel.name }), {
+            link: (
+              <Link href="/channel/new" className="font-medium text-brand-ink underline">
+                {t("products.createOne")}
+              </Link>
+            ),
+          })}
         </EmptyState>
       </main>
     );
@@ -79,10 +88,9 @@ function NewAd() {
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
-      <h1 className="text-2xl font-semibold tracking-tight">New ad</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">{t("products.newAd.title")}</h1>
       <p className="mt-1 text-sm text-stone-600">
-        Pick a saved product or add a new one. Each new video gets a fresh script and a visual direction its earlier videos haven&apos;t used, so the images
-        always look different.
+        {t("products.newAd.intro")}
       </p>
 
       <form
@@ -96,27 +104,27 @@ function NewAd() {
           value={mode}
           onChange={setSource}
           items={[
-            { value: "saved", label: `Saved product${list.length ? ` (${list.length})` : ""}` },
-            { value: "new", label: "New product" },
+            { value: "saved", label: list.length ? t("products.newAd.savedTabCount", { count: list.length }) : t("products.newAd.savedTab") },
+            { value: "new", label: t("products.newAd.newTab") },
           ]}
         />
 
         {mode === "saved" ? (
           list.length ? (
-            <div role="radiogroup" aria-label="Product" className="grid gap-3 sm:grid-cols-2">
+            <div role="radiogroup" aria-label={t("products.newAd.product")} className="grid gap-3 sm:grid-cols-2">
               {list.map((p) => (
                 <ProductChoice key={p.id} product={p} selected={picked === p.id} onSelect={() => setPicked(p.id)} />
               ))}
             </div>
           ) : (
-            <EmptyState icon={<Package className="size-8" />} title="No saved products yet">
-              Add your first one under <b>New product</b>; it&apos;s saved for next time.
+            <EmptyState icon={<Package className="size-8" />} title={t("products.newAd.noSavedTitle")}>
+              {rich(t("products.newAd.noSavedBody"), { tab: <b>{t("products.newAd.newTab")}</b> })}
             </EmptyState>
           )
         ) : (
           <>
             <Card className="p-5">
-              <Label hint="1–3 photos · a plain background works best">Product photos</Label>
+              <Label hint={t("products.newAd.photosHint")}>{t("products.newAd.photos")}</Label>
               <div className="mt-2">
                 <PhotoStrip urls={photos.photos.map((p) => p.url)} onAdd={photos.add} onRemove={photos.remove} />
               </div>
@@ -124,13 +132,13 @@ function NewAd() {
             </Card>
             <Card className="p-5">
               <ProductFields value={draft} onChange={setDraft} />
-              <p className="mt-3 text-xs text-stone-500">Saved to this channel&apos;s Products so you can reuse it.</p>
+              <p className="mt-3 text-xs text-stone-500">{t("products.newAd.savedNote")}</p>
             </Card>
           </>
         )}
 
         <Card className="p-5">
-          <Label>Sound</Label>
+          <Label>{t("products.newAd.sound")}</Label>
           <div className="mt-2">
             <VoiceModeToggle value={voiceMode} onChange={setVoiceMode} />
           </div>
@@ -138,9 +146,9 @@ function NewAd() {
 
         <ErrorNote error={create.error} />
         <div className="flex items-center justify-end gap-3">
-          {create.isPending ? <span className="text-sm text-stone-500">{mode === "new" ? "Uploading and writing the script…" : "Writing the script…"}</span> : null}
+          {create.isPending ? <span className="text-sm text-stone-500">{mode === "new" ? t("products.newAd.uploadingWriting") : t("products.newAd.writing")}</span> : null}
           <Button type="submit" variant="primary" loading={create.isPending} disabled={!ready} icon={<Sparkles className="size-4" />}>
-            Create ad
+            {t("products.newAd.createAd")}
           </Button>
         </div>
       </form>
@@ -149,6 +157,7 @@ function NewAd() {
 }
 
 function ProductChoice({ product: p, selected, onSelect }: { product: ProductItem; selected: boolean; onSelect: () => void }) {
+  const t = useT();
   return (
     <button
       type="button"
@@ -164,7 +173,7 @@ function ProductChoice({ product: p, selected, onSelect }: { product: ProductIte
         <span className="block truncate text-xs text-stone-500">{p.sellingPoints.join(" · ")}</span>
         <span className="mt-1 block text-xs text-stone-500">
           {p.price ? `${p.price} · ` : ""}
-          {p.videos} video{p.videos === 1 ? "" : "s"}
+          {t(p.videos === 1 ? "products.videosOne" : "products.videosMany", { count: p.videos })}
         </span>
       </span>
     </button>

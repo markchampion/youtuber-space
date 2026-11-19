@@ -8,11 +8,13 @@ import { checkSceneCoverage } from "@/lib/sync";
 import { pacingOf } from "@/lib/channel";
 import { JobBar, StaleBanner, StepFooter, StepHeader } from "@/components/step";
 import { Badge, Button, Card, EmptyState, ErrorNote, Input, Select, Spinner, Textarea, fmtTime, useSyncedState } from "@/components/ui";
+import { useT } from "@/lib/i18n";
 
 export default function ScenesPage() {
   const { id } = useParams<{ id: string }>();
   const { data } = useProject(id);
   const act = useProjectAction(id);
+  const t = useT();
   if (!data) return <Spinner />;
 
   const running = runningJob(data, "scenes");
@@ -28,44 +30,44 @@ export default function ScenesPage() {
   return (
     <div>
       <StepHeader
-        title="Scenes & image prompts"
-        models={[{ label: "Scenes", model: data.models.scenes }]}
-        description="Sentences are grouped into scenes, and each scene becomes one image that stays on screen while its sentences are spoken. The style prefix and suffix are added automatically, so only the scene itself is described here."
+        title={t("media.scenes.title")}
+        models={[{ label: t("common.steps.scenes"), model: data.models.scenes }]}
+        description={t("media.scenes.description")}
         actions={
           data.scenes.length ? (
             <a href={`/api/projects/${id}/export?type=prompts`}>
               <Button size="sm" variant="ghost" icon={<Download className="size-3.5" />}>
-                Prompts .txt
+                {t("media.scenes.exportPrompts")}
               </Button>
             </a>
           ) : null
         }
       />
       <StaleBanner data={data} step="scenes">
-        The script changed since these scenes were planned. Re-plan them, or check that every sentence is still covered.
+        {t("media.scenes.stale")}
       </StaleBanner>
 
       {!data.sentences.length ? (
-        <EmptyState icon={<LayoutGrid className="size-8" />} title="Approve the script first" />
+        <EmptyState icon={<LayoutGrid className="size-8" />} title={t("media.scenes.approveScriptFirst")} />
       ) : (
         <div className="space-y-4">
           <Card className="flex flex-wrap items-center gap-3 p-4">
             <div className="min-w-0 flex-1 text-sm">
               {data.scenes.length ? (
                 <>
-                  <span className="font-medium">{images} images</span> for {data.sentences.length} sentences
+                  <span className="font-medium">{t("media.scenes.imagesCount", { count: images })}</span> {t("media.scenes.forSentences", { count: data.sentences.length })}
                   {every ? (
                     <span className={every > 6 ? "text-amber-700" : "text-stone-500"}>
                       {" "}
-                      · picture changes every ~{every.toFixed(1)}s{pace.cameraCuts ? " (with camera cuts)" : ""}
+                      · {t(pace.cameraCuts ? "media.scenes.pictureEveryCuts" : "media.scenes.pictureEvery", { seconds: every.toFixed(1) })}
                     </span>
                   ) : null}
-                  <span className="text-stone-500"> · draft images ≈ ${(images * 0.02).toFixed(2)}</span>
+                  <span className="text-stone-500"> · {t("media.scenes.draftCost", { cost: (images * 0.02).toFixed(2) })}</span>
                 </>
               ) : (
                 <>
-                  {data.sentences.length} sentences are ready to plan.
-                  {!data.project.audioPath ? <span className="text-stone-500"> You can plan now, but pacing is better once the voice exists.</span> : null}
+                  {t("media.scenes.readyToPlan", { count: data.sentences.length })}
+                  {!data.project.audioPath ? <span className="text-stone-500"> {t("media.scenes.planNowHint")}</span> : null}
                 </>
               )}
             </div>
@@ -74,17 +76,17 @@ export default function ScenesPage() {
               icon={<Sparkles className="size-4" />}
               loading={Boolean(running)}
               onClick={() => {
-                if (!data.scenes.length || confirm("Re-plan all scenes? Current scenes and their images will be replaced.")) {
+                if (!data.scenes.length || confirm(t("media.scenes.confirmReplan"))) {
                   act.mutate({ action: "planScenes" });
                 }
               }}
             >
-              {data.scenes.length ? "Re-plan scenes" : "Plan scenes"}
+              {data.scenes.length ? t("media.scenes.replan") : t("media.scenes.plan")}
             </Button>
           </Card>
           <JobBar job={job} />
           <ErrorNote error={act.error} />
-          {problems.length ? <ErrorNote error={`Coverage problem: ${problems.join("; ")}`} /> : null}
+          {problems.length ? <ErrorNote error={t("media.scenes.coverageProblem", { problems: problems.join("; ") })} /> : null}
 
           <div className="space-y-3">
             {data.scenes.map((s) => (
@@ -98,7 +100,7 @@ export default function ScenesPage() {
         data={data}
         step="scenes"
         canApprove={data.scenes.length > 0 && !problems.length && !running}
-        hint="Check each description reads like a concrete drawing. On-screen text is added over the image by code, so it's always spelled right."
+        hint={t("media.scenes.footerHint")}
       />
     </div>
   );
@@ -106,6 +108,7 @@ export default function ScenesPage() {
 
 function SceneRow({ data, scene }: { data: ProjectData; scene: ProjectData["scenes"][number] }) {
   const act = useProjectAction(data.project.id);
+  const t = useT();
   const profile = data.channel.profile;
   const [desc, setDesc] = useSyncedState(scene.description);
   const [text, setText] = useSyncedState(scene.onScreenText ?? "");
@@ -128,7 +131,7 @@ function SceneRow({ data, scene }: { data: ProjectData; scene: ProjectData["scen
             {fmtTime(scene.start)}–{fmtTime(end)}
           </span>
           {scene.start != null && end != null ? <span className="tabular-nums">· {(end - scene.start).toFixed(1)}s</span> : null}
-          {scene.imagePath ? <Badge tone="green">has image</Badge> : null}
+          {scene.imagePath ? <Badge tone="green">{t("media.scenes.hasImage")}</Badge> : null}
         </div>
         <div className="space-y-1">
           {sentences.map((s, i) => (
@@ -136,7 +139,7 @@ function SceneRow({ data, scene }: { data: ProjectData; scene: ProjectData["scen
               <span className="flex-1">{s.text}</span>
               {i > 0 ? (
                 <button
-                  title="Start a new scene at this sentence"
+                  title={t("media.scenes.splitHere")}
                   onClick={() => act.mutate({ action: "splitScene", sceneId: scene.id, atSentence: s.idx })}
                   className="mt-1 rounded p-0.5 text-stone-300 opacity-0 hover:bg-stone-100 hover:text-stone-700 group-hover:opacity-100 focus:opacity-100"
                 >
@@ -154,21 +157,21 @@ function SceneRow({ data, scene }: { data: ProjectData; scene: ProjectData["scen
             icon={<Merge className="size-3.5" />}
             onClick={() => act.mutate({ action: "mergeScene", sceneId: scene.id })}
           >
-            Merge into previous
+            {t("media.scenes.mergePrevious")}
           </Button>
         ) : null}
       </div>
 
       <div className="min-w-0 space-y-2.5">
         <div className="grid grid-cols-2 gap-2">
-          <Select value={scene.frameType} onChange={(e) => update({ frameType: e.target.value })} aria-label="Frame type" className="h-9 text-[13px]">
+          <Select value={scene.frameType} onChange={(e) => update({ frameType: e.target.value })} aria-label={t("media.scenes.frameType")} className="h-9 text-[13px]">
             {profile.visual.frameTypes.map((f) => (
               <option key={f.key} value={f.key}>
                 {f.label}
               </option>
             ))}
           </Select>
-          <Select value={scene.background} onChange={(e) => update({ background: e.target.value })} aria-label="Background" className="h-9 text-[13px]">
+          <Select value={scene.background} onChange={(e) => update({ background: e.target.value })} aria-label={t("media.scenes.background")} className="h-9 text-[13px]">
             {profile.visual.backgrounds.map((b) => (
               <option key={b.key} value={b.key}>
                 {b.label}
@@ -178,14 +181,14 @@ function SceneRow({ data, scene }: { data: ProjectData; scene: ProjectData["scen
         </div>
         <Input
           className="h-9 text-[13px] font-medium uppercase"
-          placeholder="On-screen text (optional), e.g. 300,000 YEARS"
+          placeholder={t("media.scenes.onScreenPlaceholder")}
           value={text}
           onChange={(e) => setText(e.target.value)}
           onBlur={() => text !== (scene.onScreenText ?? "") && update({ onScreenText: text.trim() || null })}
         />
         {textOnly ? (
           <p className="rounded-lg bg-stone-50 px-3 py-2 text-[13px] text-stone-600">
-            Text frame: drawn by code in the channel&apos;s text color. No image is generated.
+            {t("media.scenes.textFrameNote")}
           </p>
         ) : (
           <Textarea
@@ -194,12 +197,12 @@ function SceneRow({ data, scene }: { data: ProjectData; scene: ProjectData["scen
             value={desc}
             onChange={(e) => setDesc(e.target.value)}
             onBlur={() => desc !== scene.description && update({ description: desc })}
-            aria-label="Scene description"
+            aria-label={t("media.scenes.sceneDescription")}
           />
         )}
         {!textOnly ? (
           <button onClick={() => setShowPrompt(!showPrompt)} className="flex items-center gap-1 text-xs text-stone-500 hover:text-stone-800">
-            <ChevronDown className={`size-3.5 transition-transform ${showPrompt ? "rotate-180" : ""}`} /> Full image prompt
+            <ChevronDown className={`size-3.5 transition-transform ${showPrompt ? "rotate-180" : ""}`} /> {t("media.scenes.fullPrompt")}
           </button>
         ) : null}
         {showPrompt ? <p className="rounded-lg bg-stone-50 p-2.5 font-mono text-[11px] leading-relaxed text-stone-600">{scene.prompt}</p> : null}

@@ -8,11 +8,13 @@ import { pacingOf, type ChannelProfile, type OutlineBeat, type OutlineTemplate }
 import { DEFAULT_OUTLINE_TEMPLATE, OUTLINE_TEMPLATES } from "@/lib/outline-templates";
 import type { TranscriptAnalysis } from "@/lib/types";
 import { Badge, Button, ErrorNote, Input, Label, Select, Textarea } from "./ui";
+import { useT } from "@/lib/i18n";
 
 type Stats = { words: number; sentences: number; avgWordsPerSentence: number; wordsPerMinute: number | null };
 
 /** Edit the structure every outline follows, pick a built-in one, or learn one from a transcript. */
 export function OutlineTemplateEditor({ profile, onChange }: { profile: ChannelProfile; onChange: (p: ChannelProfile) => void }) {
+  const tr = useT();
   const t: OutlineTemplate = profile.outlineTemplate?.beats?.length ? profile.outlineTemplate : DEFAULT_OUTLINE_TEMPLATE;
   const setT = (next: OutlineTemplate) => onChange({ ...profile, outlineTemplate: next });
   const setBeat = (i: number, patch: Partial<OutlineBeat>) => setT({ ...t, beats: t.beats.map((b, j) => (j === i ? { ...b, ...patch } : b)) });
@@ -27,23 +29,23 @@ export function OutlineTemplateEditor({ profile, onChange }: { profile: ChannelP
     <div className="space-y-3">
       <div className="flex flex-wrap items-end gap-2">
         <div className="min-w-[200px] flex-1">
-          <Label>Structure name</Label>
+          <Label>{tr("script.template.name")}</Label>
           <Input value={t.name} onChange={(e) => setT({ ...t, name: e.target.value })} />
         </div>
         <div>
-          <Label>Start from a built-in structure</Label>
+          <Label>{tr("script.template.builtIn")}</Label>
           <Select
             className="w-60"
             value=""
             onChange={(e) => {
               const pick = OUTLINE_TEMPLATES.find((x) => x.name === e.target.value);
-              if (pick && confirm(`Replace the current structure with "${pick.name}"? (Nothing is saved until you click Save profile.)`)) setT(structuredClone(pick));
+              if (pick && confirm(tr("script.template.replaceConfirm", { name: pick.name }))) setT(structuredClone(pick));
             }}
           >
-            <option value="">Choose…</option>
+            <option value="">{tr("script.template.choose")}</option>
             {OUTLINE_TEMPLATES.map((x) => (
               <option key={x.name} value={x.name}>
-                {x.name} ({x.beats.length} parts)
+                {tr("script.template.parts", { name: x.name, count: x.beats.length })}
               </option>
             ))}
           </Select>
@@ -55,8 +57,8 @@ export function OutlineTemplateEditor({ profile, onChange }: { profile: ChannelP
           <li key={`${b.key}-${i}`} className="rounded-lg bg-stone-50 p-3 ring-1 ring-stone-200">
             <div className="flex flex-wrap items-center gap-2">
               <span className="grid size-6 shrink-0 place-items-center rounded-full bg-stone-900 text-xs font-semibold text-white">{i + 1}</span>
-              {i === 0 ? <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-orange-800">Hook</span> : null}
-              <Input className="h-8 min-w-[160px] flex-1 text-[13px] font-medium" value={b.name} onChange={(e) => setBeat(i, { name: e.target.value })} aria-label="Part name" />
+              {i === 0 ? <span className="rounded bg-orange-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-orange-800">{tr("script.template.hook")}</span> : null}
+              <Input className="h-8 min-w-[160px] flex-1 text-[13px] font-medium" value={b.name} onChange={(e) => setBeat(i, { name: e.target.value })} aria-label={tr("script.template.partName")} />
               <div className="flex items-center gap-1 text-xs text-stone-500">
                 <Input
                   type="number"
@@ -65,25 +67,25 @@ export function OutlineTemplateEditor({ profile, onChange }: { profile: ChannelP
                   min={1}
                   max={60}
                   onChange={(e) => setBeat(i, { share: Number(e.target.value) })}
-                  aria-label="Share of the video in percent"
+                  aria-label={tr("script.template.share")}
                 />
                 %
               </div>
-              <Button size="sm" variant="ghost" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Move up" icon={<ArrowUp className="size-3.5" />} />
-              <Button size="sm" variant="ghost" disabled={i === t.beats.length - 1} onClick={() => move(i, 1)} aria-label="Move down" icon={<ArrowDown className="size-3.5" />} />
+              <Button size="sm" variant="ghost" disabled={i === 0} onClick={() => move(i, -1)} aria-label={tr("script.template.moveUp")} icon={<ArrowUp className="size-3.5" />} />
+              <Button size="sm" variant="ghost" disabled={i === t.beats.length - 1} onClick={() => move(i, 1)} aria-label={tr("script.template.moveDown")} icon={<ArrowDown className="size-3.5" />} />
               <Button
                 size="sm"
                 variant="ghost"
                 className="text-stone-400 hover:text-red-600"
                 disabled={t.beats.length <= 2}
                 onClick={() => setT({ ...t, beats: t.beats.filter((_, j) => j !== i) })}
-                aria-label="Remove part"
+                aria-label={tr("script.template.removePart")}
                 icon={<Trash2 className="size-3.5" />}
               />
             </div>
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
-              <Textarea rows={2} className="text-[13px]" placeholder="Purpose: what this part does for the viewer" value={b.purpose} onChange={(e) => setBeat(i, { purpose: e.target.value })} aria-label="Purpose" />
-              <Textarea rows={2} className="text-[13px]" placeholder="Guidance: how it's written" value={b.guidance} onChange={(e) => setBeat(i, { guidance: e.target.value })} aria-label="Guidance" />
+              <Textarea rows={2} className="text-[13px]" placeholder={tr("script.template.purposePlaceholder")} value={b.purpose} onChange={(e) => setBeat(i, { purpose: e.target.value })} aria-label={tr("script.template.purpose")} />
+              <Textarea rows={2} className="text-[13px]" placeholder={tr("script.template.guidancePlaceholder")} value={b.guidance} onChange={(e) => setBeat(i, { guidance: e.target.value })} aria-label={tr("script.template.guidance")} />
             </div>
           </li>
         ))}
@@ -95,9 +97,9 @@ export function OutlineTemplateEditor({ profile, onChange }: { profile: ChannelP
           icon={<Plus className="size-3.5" />}
           onClick={() => setT({ ...t, beats: [...t.beats, { key: `part_${t.beats.length + 1}`, name: "", purpose: "", guidance: "", share: 8 }] })}
         >
-          Add part
+          {tr("script.template.addPart")}
         </Button>
-        <span className={`text-xs ${Math.abs(total - 100) > 15 ? "text-amber-700" : "text-stone-500"}`}>Shares add up to {total}% (aim for ~100%)</span>
+        <span className={`text-xs ${Math.abs(total - 100) > 15 ? "text-amber-700" : "text-stone-500"}`}>{tr("script.template.total", { total })}</span>
       </div>
 
       <LearnFromTranscript profile={profile} onChange={onChange} />
@@ -106,6 +108,7 @@ export function OutlineTemplateEditor({ profile, onChange }: { profile: ChannelP
 }
 
 function LearnFromTranscript({ profile, onChange }: { profile: ChannelProfile; onChange: (p: ChannelProfile) => void }) {
+  const t = useT();
   const [open, setOpen] = useState(false);
   const [text, setText] = useState("");
   const analyze = useMutation({
@@ -116,26 +119,29 @@ function LearnFromTranscript({ profile, onChange }: { profile: ChannelProfile; o
   if (!open) {
     return (
       <Button size="sm" variant="secondary" onClick={() => setOpen(true)} icon={<GraduationCap className="size-3.5" />}>
-        Learn from a video you like
+        {t("script.template.learn")}
       </Button>
     );
   }
   return (
     <div className="space-y-3 rounded-lg bg-orange-50/60 p-4 ring-1 ring-orange-200">
       <div>
-        <div className="font-medium">Learn from a video you like</div>
+        <div className="font-medium">{t("script.template.learn")}</div>
         <p className="text-[13px] text-stone-600">
-          On YouTube, open the video → <b>…more</b> → <b>Show transcript</b>, select all of it and paste it here. The AI learns its structure, pacing and techniques, not its
-          content.
+          {t("script.template.learnHelp")
+            .split(/(\{more\}|\{show\})/)
+            .map((part, i) =>
+              part === "{more}" ? <b key={i}>{t("script.template.ytMore")}</b> : part === "{show}" ? <b key={i}>{t("script.template.ytShow")}</b> : part,
+            )}
         </p>
       </div>
-      <Textarea rows={6} className="text-[13px]" value={text} onChange={(e) => setText(e.target.value)} placeholder="0:00 This morning, a machine screamed at you until you woke up…" />
+      <Textarea rows={6} className="text-[13px]" value={text} onChange={(e) => setText(e.target.value)} placeholder={t("script.template.transcriptPlaceholder")} />
       <div className="flex gap-2">
         <Button variant="primary" size="sm" loading={analyze.isPending} disabled={text.trim().length < 500} onClick={() => analyze.mutate()}>
-          Analyze
+          {t("script.template.analyze")}
         </Button>
         <Button variant="ghost" size="sm" onClick={() => setOpen(false)}>
-          Close
+          {t("common.close")}
         </Button>
       </div>
       <ErrorNote error={analyze.error} />
@@ -143,13 +149,17 @@ function LearnFromTranscript({ profile, onChange }: { profile: ChannelProfile; o
       {r ? (
         <div className="space-y-3 border-t border-orange-200 pt-3 text-[13px]">
           <div className="flex flex-wrap gap-2">
-            <Badge>{r.stats.words.toLocaleString()} words</Badge>
-            <Badge>{r.stats.avgWordsPerSentence} words per sentence</Badge>
-            {r.stats.wordsPerMinute ? <Badge>{r.stats.wordsPerMinute} words per minute</Badge> : <Badge>no timestamps, so speed unknown</Badge>}
+            <Badge>{t("script.template.words", { count: r.stats.words })}</Badge>
+            <Badge>{t("script.template.perSentence", { n: r.stats.avgWordsPerSentence })}</Badge>
+            {r.stats.wordsPerMinute ? (
+              <Badge>{t("script.template.perMinute", { n: r.stats.wordsPerMinute })}</Badge>
+            ) : (
+              <Badge>{t("script.template.noTimestamps")}</Badge>
+            )}
           </div>
 
           <div>
-            <div className="mb-1 font-medium">Structure: {r.analysis.template.name}</div>
+            <div className="mb-1 font-medium">{t("script.template.structure", { name: r.analysis.template.name })}</div>
             <ol className="list-decimal space-y-0.5 pl-5 text-stone-700">
               {r.analysis.template.beats.map((b, i) => (
                 <li key={i}>
@@ -158,12 +168,12 @@ function LearnFromTranscript({ profile, onChange }: { profile: ChannelProfile; o
               ))}
             </ol>
             <Button size="sm" className="mt-2" onClick={() => onChange({ ...profile, outlineTemplate: r.analysis.template })}>
-              Use this structure
+              {t("script.template.useStructure")}
             </Button>
           </div>
 
           <div>
-            <div className="mb-1 font-medium">Pacing</div>
+            <div className="mb-1 font-medium">{t("script.template.pacing")}</div>
             <Button
               size="sm"
               onClick={() =>
@@ -178,12 +188,12 @@ function LearnFromTranscript({ profile, onChange }: { profile: ChannelProfile; o
                 })
               }
             >
-              Match its sentence length{r.stats.wordsPerMinute ? " and speed" : ""}
+              {r.stats.wordsPerMinute ? t("script.template.matchLengthSpeed") : t("script.template.matchLength")}
             </Button>
           </div>
 
           <div>
-            <div className="mb-1 font-medium">Techniques</div>
+            <div className="mb-1 font-medium">{t("script.template.techniques")}</div>
             <ul className="list-disc space-y-0.5 pl-5 text-stone-700">
               {r.analysis.techniques.map((x, i) => (
                 <li key={i}>{x}</li>
@@ -194,20 +204,20 @@ function LearnFromTranscript({ profile, onChange }: { profile: ChannelProfile; o
               className="mt-2"
               onClick={() => onChange({ ...profile, extraScriptRules: [...new Set([...profile.extraScriptRules, ...r.analysis.techniques])] })}
             >
-              Add to script rules
+              {t("script.template.addRules")}
             </Button>
           </div>
 
           {r.analysis.voiceSample ? (
             <div>
-              <div className="mb-1 font-medium">Voice sample (new text in the same tone)</div>
+              <div className="mb-1 font-medium">{t("script.template.voiceSample")}</div>
               <p className="rounded bg-white p-2 italic text-stone-700 ring-1 ring-stone-200">{r.analysis.voiceSample}</p>
               <Button size="sm" className="mt-2" onClick={() => onChange({ ...profile, voiceSample: r.analysis.voiceSample })}>
-                Use as voice sample
+                {t("script.template.useSample")}
               </Button>
             </div>
           ) : null}
-          <p className="text-xs text-stone-500">Nothing is saved until you click Save profile.</p>
+          <p className="text-xs text-stone-500">{t("script.template.notSaved")}</p>
         </div>
       ) : null}
     </div>

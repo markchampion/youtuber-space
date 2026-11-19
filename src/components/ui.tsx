@@ -4,6 +4,7 @@ import React from "react";
 import clsx from "clsx";
 import { twMerge } from "tailwind-merge";
 import { Loader2 } from "lucide-react";
+import { useT } from "@/lib/i18n";
 
 /** Local state that resets whenever the upstream value changes (no effect needed). */
 export function useSyncedState<T>(value: T) {
@@ -175,7 +176,8 @@ export function Tabs<T extends string>({
   );
 }
 
-export function CopyButton({ text, label = "Copy" }: { text: string; label?: string }) {
+export function CopyButton({ text, label }: { text: string; label?: string }) {
+  const t = useT();
   const [done, setDone] = React.useState(false);
   return (
     <Button
@@ -187,7 +189,7 @@ export function CopyButton({ text, label = "Copy" }: { text: string; label?: str
         setTimeout(() => setDone(false), 1200);
       }}
     >
-      {done ? "Copied" : label}
+      {done ? t("nav.ui.copied") : (label ?? t("nav.ui.copy"))}
     </Button>
   );
 }

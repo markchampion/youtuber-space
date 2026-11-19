@@ -8,6 +8,7 @@ import { stepsFor, type StepKey } from "@/lib/types";
 import { Suspense, useSyncExternalStore } from "react";
 import { useSearchParams } from "next/navigation";
 import { Button, Card, EmptyState, Spinner, Tabs, cn, fmtTime, fmtUsd } from "@/components/ui";
+import { autoStepLabel, stepLabel, useT, type T } from "@/lib/i18n";
 
 type Row = {
   id: string;
@@ -65,16 +66,17 @@ export default function Home() {
 }
 
 /** One line of live progress for a video an Autopilot / batch is working on. */
-function liveStatus(r: Row): { text: string; tone: "run" | "error" | "paused" } | null {
+function liveStatus(t: T, r: Row): { text: string; tone: "run" | "error" | "paused" } | null {
   const a = r.autopilot;
   if (!a || a.status === "done" || a.status === "stopped") return null;
-  if (a.status === "error") return { text: a.error ? `Failed: ${a.error}` : "Failed", tone: "error" };
-  if (a.status === "paused") return { text: `Paused at ${a.step}`, tone: "paused" };
-  const label = a.step.charAt(0).toUpperCase() + a.step.slice(1);
+  if (a.status === "error") return { text: a.error ? t("ideas.home.statusFailedWith", { error: a.error }) : t("ideas.home.statusFailed"), tone: "error" };
+  const label = autoStepLabel(t, a.step, a.step.charAt(0).toUpperCase() + a.step.slice(1));
+  if (a.status === "paused") return { text: t("ideas.home.statusPaused", { step: t.locale === "en" ? a.step : label }), tone: "paused" };
   return { text: r.job?.message ? `${label}: ${r.job.message}` : `${label}…`, tone: "run" };
 }
 
 function VideoList() {
+  const t = useT();
   const params = useSearchParams();
   // A batch links here with ?ids=… to show just its videos.
   const only = params.get("ids")?.split(",").filter(Boolean) ?? null;
@@ -88,21 +90,25 @@ function VideoList() {
   });
   const projects = (data?.projects ?? []).filter((p) => !only || only.includes(p.id));
   const runningCount = projects.filter((p) => p.autopilot?.status === "running").length;
-  const channelName = data?.channel.name ?? "this channel";
+  const failedCount = projects.filter((p) => p.autopilot?.status === "error").length;
+  const channelName = data?.channel.name ?? t("ideas.home.thisChannelFallback");
   const ad = data?.channel.kind === "product_ad";
   const newHref = ad ? "/ads/new" : "/ideas";
+  const [emptyAdA, emptyAdB] = t("ideas.home.emptyAd", { link: "\u0000" }).split("\u0000");
+  const [emptyVideoA, emptyVideoB] = t("ideas.home.emptyVideo", { link: "\u0000" }).split("\u0000");
 
   return (
     <main className="mx-auto w-full max-w-[1400px] px-4 py-8 sm:px-6">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">
-            Videos <span className="text-stone-400">·</span> <span className="text-stone-600">{scope === "all" ? "All channels" : channelName}</span>
+            {t("ideas.home.videos")} <span className="text-stone-400">·</span>{" "}
+            <span className="text-stone-600">{scope === "all" ? t("ideas.home.allChannels") : channelName}</span>
           </h1>
           <p className="mt-1 text-sm text-stone-600">
             {ad && scope === "channel"
-              ? "Each ad goes product photo → script → voice → scenes → images → 9:16 render."
-              : "Each video goes idea → script → voice → scenes → images → render."}
+              ? t("ideas.home.adFlow")
+              : t("ideas.home.videoFlow")}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -110,13 +116,13 @@ function VideoList() {
             value={scope}
             onChange={setScope}
             items={[
-              { value: "channel", label: "This channel" },
-              { value: "all", label: "All channels" },
+              { value: "channel", label: t("ideas.home.thisChannel") },
+              { value: "all", label: t("ideas.home.allChannels") },
             ]}
           />
         <Link href={newHref}>
           <Button variant="primary" icon={<Plus className="size-4" />}>
-            {ad ? "New ad" : "New video"}
+            {ad ? t("ideas.home.newAd") : t("ideas.home.newVideo")}
           </Button>
         </Link>
         </div>
@@ -124,14 +130,18 @@ function VideoList() {
 
       {only ? (
         <div className="mb-4 flex flex-wrap items-center gap-3 rounded-xl bg-white px-4 py-3 text-sm ring-1 ring-stone-200">
-          <span className="font-medium">Batch of {only.length}</span>
+          <span className="font-medium">{t("ideas.home.batchOf", { count: only.length })}</span>
           <span className="text-stone-600">
-            {runningCount ? `${runningCount} running · ` : ""}
-            {projects.filter((p) => p.rendered).length} rendered
-            {projects.some((p) => p.autopilot?.status === "error") ? ` · ${projects.filter((p) => p.autopilot?.status === "error").length} failed` : ""}
+            {[
+              runningCount ? t("ideas.home.running", { count: runningCount }) : null,
+              t("ideas.home.rendered", { count: projects.filter((p) => p.rendered).length }),
+              failedCount ? t("ideas.home.failed", { count: failedCount }) : null,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </span>
           <Link href="/" className="ml-auto text-stone-500 hover:text-stone-800 hover:underline">
-            Show all videos
+            {t("ideas.home.showAll")}
           </Link>
         </div>
       ) : null}
@@ -139,16 +149,22 @@ function VideoList() {
       {isLoading ? (
         <Spinner />
       ) : !projects.length ? (
-        <EmptyState icon={<Lightbulb className="size-8" />} title={scope === "all" ? "No videos yet" : `No videos for ${channelName} yet`}>
+        <EmptyState icon={<Lightbulb className="size-8" />} title={scope === "all" ? t("ideas.home.noVideos") : t("ideas.home.noVideosFor", { name: channelName })}>
           {ad ? (
             <>
-              <Link href="/ads/new" className="font-medium text-brand-ink underline">Make your first ad</Link>: upload a product photo, add a
-              few selling points, and the AI does the rest.
+              {emptyAdA}
+              <Link href="/ads/new" className="font-medium text-brand-ink underline">
+                {t("ideas.home.emptyAdLink")}
+              </Link>
+              {emptyAdB}
             </>
           ) : (
             <>
-              Start from <Link href="/ideas" className="font-medium text-brand-ink underline">Ideas</Link>: generate a batch, or
-              paste your own idea and get it scored before you commit.
+              {emptyVideoA}
+              <Link href="/ideas" className="font-medium text-brand-ink underline">
+                {t("ideas.home.emptyVideoLink")}
+              </Link>
+              {emptyVideoB}
             </>
           )}
         </EmptyState>
@@ -157,7 +173,7 @@ function VideoList() {
           {projects.map((p) => {
             const step = nextStep(p);
             const steps = stepsFor(p.kind, p.voiceMode);
-            const live = liveStatus(p);
+            const live = liveStatus(t, p);
             const done = steps.filter((s) => p.approvals[s.key]).length;
             return (
               <Link key={p.id} href={`/projects/${p.id}/${step.path}`} className="group">
@@ -172,7 +188,7 @@ function VideoList() {
                       </div>
                     )}
                     {p.rendered ? (
-                      <span className="absolute right-2 top-2 rounded-full bg-emerald-600 px-2 py-0.5 text-xs font-medium text-white">Rendered</span>
+                      <span className="absolute right-2 top-2 rounded-full bg-emerald-600 px-2 py-0.5 text-xs font-medium text-white">{t("ideas.home.renderedBadge")}</span>
                     ) : null}
                   </div>
                   <div className="p-4">
@@ -184,7 +200,7 @@ function VideoList() {
                       {steps.map((s) => (
                         <span
                           key={s.key}
-                          title={s.label}
+                          title={stepLabel(t, s)}
                           className={cn(
                             "h-1.5 flex-1 rounded-full",
                             p.stale[s.key] ? "bg-amber-400" : p.approvals[s.key] ? "bg-emerald-500" : "bg-stone-200",
@@ -205,7 +221,7 @@ function VideoList() {
                           {live.text}
                         </span>
                       ) : (
-                        <span>{done === steps.length ? "Done" : `Next: ${step.label}`}</span>
+                        <span>{done === steps.length ? t("ideas.home.done") : t("ideas.home.next", { step: stepLabel(t, step) })}</span>
                       )}
                       <span>
                         {p.audioDuration ? fmtTime(p.audioDuration) + " · " : ""}

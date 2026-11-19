@@ -2,6 +2,7 @@ import "server-only";
 import { env } from "@/lib/env";
 import type { VoiceMode } from "@/lib/types";
 import { getChannel } from "./common";
+import { activeVoiceId } from "./voice";
 import { createAdProject } from "./product-ad";
 import { getProduct } from "./products";
 import { startAutopilot } from "./autopilot";
@@ -29,7 +30,7 @@ export function startBatch(input: BatchInput, baseUrl: string) {
   const channel = getChannel(products[0].channelId);
   if (products.some((p) => p.channelId !== channel.id)) throw new Error("All products must belong to one channel");
   // Check once up front instead of failing every video separately.
-  if (input.voiceMode === "voice" && !env.dryRun && !channel.voiceId) throw new Error("Pick a voice for this channel first (Voice step of any video), or make them silent");
+  if (input.voiceMode === "voice" && !env.dryRun && !activeVoiceId(channel)) throw new Error("Pick a voice for this channel first (Voice step of any video), or make them silent");
 
   const projectIds: string[] = [];
   for (const product of products) {

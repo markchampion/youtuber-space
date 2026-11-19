@@ -1,10 +1,9 @@
 import "server-only";
 import { ElevenLabsClient } from "@elevenlabs/elevenlabs-js";
 import { env, sampleRateFromFormat } from "@/lib/env";
-import type { VoiceSettings } from "@/lib/channel";
+import type { SynthOpts, SynthResult, VoiceOption } from "./types";
 import { recordCost } from "@/lib/costs";
-import { buildSpokenText, sentenceTimesFromAlignment, splitSentences, wordCount, type TimeSpan } from "@/lib/sync";
-import { fakeSpeech } from "./wav";
+import { buildSpokenText, sentenceTimesFromAlignment, splitSentences } from "@/lib/sync";
 
 let client: { key: string; api: ElevenLabsClient } | null = null;
 function getClient() {
@@ -14,41 +13,14 @@ function getClient() {
   return client.api;
 }
 
-export type SynthResult = {
-  pcm: Buffer; // 16-bit mono
-  sampleRate: number;
-  sampleCount: number;
-  sentenceTimes: TimeSpan[]; // relative to paragraph start
-};
-
 // Rough $ per character on a paid ElevenLabs plan, used only for the cost meter.
 const USD_PER_CHAR = 0.00018;
 
-export async function synthesizeParagraph(opts: {
-  text: string;
-  voiceId: string;
-  settings: VoiceSettings;
-  pronunciations: Record<string, string>;
-  previousText?: string;
-  nextText?: string;
-  projectId: string;
-  locale?: string; // must match the locale used when the script was split into sentences
-}): Promise<SynthResult> {
+/** Dry run is handled by the provider wrapper (src/lib/tts/provider.ts). */
+export async function synthesizeParagraph(opts: SynthOpts): Promise<SynthResult> {
   const sentences = splitSentences(opts.text, opts.locale).map((s) => s.text);
   const spoken = buildSpokenText(sentences, opts.pronunciations);
   const sampleRate = sampleRateFromFormat(env.elevenLabsOutputFormat);
-
-  if (env.dryRun) {
-    const durations = sentences.map((s) => Math.max(1.2, wordCount(s, opts.locale) * 0.4));
-    const pcm = fakeSpeech(durations, sampleRate);
-    let t = 0;
-    const sentenceTimes = durations.map((d) => {
-      const span = { start: t, end: t + d * 0.85 };
-      t += d;
-      return span;
-    });
-    return { pcm, sampleRate, sampleCount: pcm.length / 2, sentenceTimes };
-  }
 
   const res = await getClient().textToSpeech.convertWithTimestamps(opts.voiceId, {
     text: spoken.text,
@@ -80,15 +52,6 @@ export async function synthesizeParagraph(opts: {
   recordCost(opts.projectId, "elevenlabs", "tts", spoken.text.length * USD_PER_CHAR);
   return { pcm: pcm.subarray(0, sampleCount * 2), sampleRate, sampleCount, sentenceTimes };
 }
-
-export type VoiceOption = {
-  id: string;
-  name: string;
-  description?: string;
-  previewUrl?: string;
-  labels?: Record<string, string>;
-  languages: string[]; // ISO codes the voice is verified for (e.g. "vi")
-};
 
 export async function listVoices(): Promise<VoiceOption[]> {
   if (env.dryRun || !env.elevenLabsKey) {

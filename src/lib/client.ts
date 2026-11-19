@@ -23,6 +23,8 @@ export async function api<T = unknown>(url: string, init?: RequestInit & { json?
 export type ProjectData = {
   project: Project;
   channel: Pick<Channel, "id" | "profile" | "voiceId" | "voiceSettings" | "pronunciations"> & { kind: ChannelKind; characterRefUrl: string | null };
+  /** Narration provider picked in Settings → Voice connection. */
+  ttsBackend: "elevenlabs" | "local";
   /** Product ads only. */
   product: (ProductBrief & { imageUrls: (string | null)[] }) | null;
   paragraphs: (Paragraph & { audioUrl: string | null; needsVoice: boolean })[];

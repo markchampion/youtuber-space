@@ -11,8 +11,10 @@ import { STYLE_PRESETS } from "@/lib/style-presets";
 import { ProfileEditor } from "@/components/profile-editor";
 import { LANGUAGES } from "@/lib/languages";
 import { Button, Card, ErrorNote, Input, Label, Select, Textarea, cn } from "@/components/ui";
+import { useT } from "@/lib/i18n";
 
 export default function NewChannelPage() {
+  const t = useT();
   const router = useRouter();
   const qc = useQueryClient();
   const [kind, setKind] = useState<ChannelKind>("longform");
@@ -48,13 +50,13 @@ export default function NewChannelPage() {
     return (
       <main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6">
         <button onClick={() => setDraft(null)} className="mb-3 flex items-center gap-1 text-sm text-stone-600 hover:text-stone-900">
-          <ArrowLeft className="size-4" /> Back to the description
+          <ArrowLeft className="size-4" /> {t("channel.create.back")}
         </button>
-        <h1 className="text-2xl font-semibold tracking-tight">Review your channel</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">{t("channel.create.reviewTitle")}</h1>
         <p className="mt-1 max-w-2xl text-sm text-stone-600">
           {isAdChannel(draft)
-            ? "A ready-made product-ad setup with your brand and style filled in. Check the voice and visual style, then create it. You can change all of this later."
-            : "Claude drafted every field from your description. Skim the essentials and angles, tweak anything, then create it. You can change all of this later."}
+            ? t("channel.create.reviewAd")
+            : t("channel.create.reviewLongform")}
         </p>
         <div className="mt-6">
           <ProfileEditor value={draft} onChange={setDraft} />
@@ -64,10 +66,10 @@ export default function NewChannelPage() {
             <ErrorNote error={create.error} />
           </div>
           <Button variant="ghost" loading={generate.isPending} onClick={() => generate.mutate()} icon={<Wand2 className="size-4" />}>
-            Draft again
+            {t("channel.create.draftAgain")}
           </Button>
           <Button variant="primary" loading={create.isPending} onClick={() => create.mutate(draft)}>
-            Create channel
+            {t("channel.create.createChannel")}
           </Button>
         </div>
       </main>
@@ -76,18 +78,18 @@ export default function NewChannelPage() {
 
   return (
     <main className="mx-auto w-full max-w-3xl px-4 py-8 sm:px-6">
-      <h1 className="text-2xl font-semibold tracking-tight">New channel</h1>
+      <h1 className="text-2xl font-semibold tracking-tight">{t("channel.create.title")}</h1>
       <p className="mt-1 text-sm text-stone-600">
         {ad
-          ? "Short vertical ads: upload a product photo, and the AI makes 15–20 second ads with new product scenes, a voiceover and captions."
-          : "Describe the channel in a few sentences. Claude drafts the whole profile: topic angles, hook style, character, palette and more."}
+          ? t("channel.create.introAd")
+          : t("channel.create.introLongform")}
       </p>
 
-      <div role="radiogroup" aria-label="Channel type" className="mt-6 grid gap-3 sm:grid-cols-2">
+      <div role="radiogroup" aria-label={t("channel.create.typeAria")} className="mt-6 grid gap-3 sm:grid-cols-2">
         {(
           [
-            { key: "longform", label: "Long-form video", blurb: "Narrated YouTube explainers: idea → script → scenes → 16:9 video, plus Shorts.", icon: Clapperboard },
-            { key: "product_ad", label: "Product ad", blurb: "15–20 s 9:16 ads from your product photo, with voiceover and captions.", icon: ShoppingBag },
+            { key: "longform", icon: Clapperboard },
+            { key: "product_ad", icon: ShoppingBag },
           ] as const
         ).map((k) => (
           <button
@@ -106,8 +108,8 @@ export default function NewChannelPage() {
           >
             <k.icon className="mt-0.5 size-5 shrink-0 text-stone-600" />
             <div>
-              <div className="text-sm font-medium">{k.label}</div>
-              <div className="text-[13px] text-stone-600">{k.blurb}</div>
+              <div className="text-sm font-medium">{t(`channel.create.kinds.${k.key}.label`)}</div>
+              <div className="text-[13px] text-stone-600">{t(`channel.create.kinds.${k.key}.blurb`)}</div>
             </div>
           </button>
         ))}
@@ -122,27 +124,27 @@ export default function NewChannelPage() {
       >
         <Card className="space-y-4 p-5">
           <div>
-            <Label hint={ad ? "the first words become the channel name" : undefined}>{ad ? "Brand or shop" : "Describe your channel"}</Label>
+            <Label hint={ad ? t("channel.create.brandHint") : undefined}>{ad ? t("channel.create.brandLabel") : t("channel.create.describeLabel")}</Label>
             <Textarea
               rows={ad ? 2 : 4}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder={
                 ad
-                  ? "e.g. Lumi Home. Minimalist home gadgets for small apartments, sold online in Vietnam."
-                  : "e.g. Short explainers about the history of space exploration: the failures, the near-disasters and the weird science, for curious adults who aren't scientists."
+                  ? t("channel.create.brandPlaceholder")
+                  : t("channel.create.describePlaceholder")
               }
               autoFocus
             />
           </div>
           {ad ? null : (
             <div>
-              <Label hint="optional">Titles or channels you like</Label>
-              <Input value={examples} onChange={(e) => setExamples(e.target.value)} placeholder="e.g. Kurzgesagt, “What If the Moon Disappeared?”" />
+              <Label hint={t("channel.optional")}>{t("channel.create.examplesLabel")}</Label>
+              <Input value={examples} onChange={(e) => setExamples(e.target.value)} placeholder={t("channel.create.examplesPlaceholder")} />
             </div>
           )}
           <div>
-            <Label hint="what the audience hears and reads">Language</Label>
+            <Label hint={t("channel.create.languageHint")}>{t("channel.language")}</Label>
             <Select value={language} onChange={(e) => setLanguage(e.target.value)} className="max-w-xs">
               {LANGUAGES.map((l) => (
                 <option key={l.code} value={l.code}>
@@ -153,15 +155,15 @@ export default function NewChannelPage() {
             </Select>
           </div>
           <div>
-            <Label hint="optional">{ad ? "Voiceover tone" : "Narration tone"}</Label>
-            <Input value={tone} onChange={(e) => setTone(e.target.value)} placeholder={ad ? "e.g. warm and playful, like a friend's recommendation" : "e.g. calm and curious, 2nd person"} />
+            <Label hint={t("channel.optional")}>{ad ? t("channel.create.voiceoverTone") : t("channel.create.narrationTone")}</Label>
+            <Input value={tone} onChange={(e) => setTone(e.target.value)} placeholder={ad ? t("channel.create.tonePlaceholderAd") : t("channel.create.tonePlaceholder")} />
           </div>
         </Card>
 
         <div>
-          <div className="mb-2 text-sm font-medium text-stone-700">Visual style</div>
+          <div className="mb-2 text-sm font-medium text-stone-700">{t("channel.create.visualStyle")}</div>
           <div role="radiogroup" className="grid gap-3 sm:grid-cols-2">
-            {[...presets, { key: "custom", label: "Custom…", blurb: "Describe your own style.", prompt: "", swatch: [] as string[] }].map((s) => (
+            {[...presets, { key: "custom", label: t("channel.create.custom"), blurb: t("channel.create.customBlurb"), prompt: "", swatch: [] as string[] }].map((s) => (
               <button
                 key={s.key}
                 type="button"
@@ -182,7 +184,7 @@ export default function NewChannelPage() {
                 </div>
                 <div>
                   <div className="text-sm font-medium">{s.label}</div>
-                  <div className="text-[13px] text-stone-600">{s.blurb}</div>
+                  <div className="text-[13px] text-stone-600">{s.key === "custom" ? s.blurb : t.dyn(`channel.styleBlurbs.${s.key}`, s.blurb)}</div>
                 </div>
               </button>
             ))}
@@ -193,16 +195,16 @@ export default function NewChannelPage() {
               className="mt-3"
               value={customStyle}
               onChange={(e) => setCustomStyle(e.target.value)}
-              placeholder="e.g. 1950s retro print style, halftone texture, cream and teal, cartoon astronauts"
+              placeholder={t("channel.create.customPlaceholder")}
             />
           ) : null}
         </div>
 
         <ErrorNote error={generate.error} />
         <div className="flex items-center justify-end gap-3">
-          {generate.isPending && !ad ? <span className="text-sm text-stone-500">Drafting the profile. This takes about 30–60 seconds…</span> : null}
+          {generate.isPending && !ad ? <span className="text-sm text-stone-500">{t("channel.create.drafting")}</span> : null}
           <Button type="submit" variant="primary" loading={generate.isPending} disabled={!description.trim()} icon={<Sparkles className="size-4" />}>
-            {ad ? "Set up channel" : "Draft channel"}
+            {ad ? t("channel.create.setUp") : t("channel.create.draft")}
           </Button>
         </div>
       </form>

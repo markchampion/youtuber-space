@@ -8,10 +8,12 @@ import { runningJob, useProject } from "@/lib/client";
 import { stepsFor } from "@/lib/types";
 import { angleName } from "@/lib/channel";
 import { Badge, Spinner, cn, fmtTime, fmtUsd } from "@/components/ui";
+import { stepLabel, useT } from "@/lib/i18n";
 
 const JOB_FOR_STEP: Record<string, string> = { voice: "voice", scenes: "scenes", images: "images", render: "render", shorts: "short" };
 
 export default function ProjectLayout({ children }: { children: React.ReactNode }) {
+  const t = useT();
   const { id } = useParams<{ id: string }>();
   const path = usePathname();
   const { data, error } = useProject(id);
@@ -25,6 +27,7 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
     );
   }
   const { project, channel } = data;
+  const angle = project.angle === 0 ? t("nav.project.freshAngle") : angleName(channel.profile, project.angle);
 
   return (
     <div className="mx-auto flex w-full max-w-[1400px] flex-1 flex-col px-4 sm:px-6">
@@ -32,21 +35,21 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2 text-xs text-stone-500">
             <Link href="/" className="hover:text-stone-800">
-              Videos
+              {t("nav.links.videos")}
             </Link>
             <span>/</span>
-            {angleName(channel.profile, project.angle) !== "—" ? <Badge tone="brand">{angleName(channel.profile, project.angle)}</Badge> : null}
+            {angle !== "—" ? <Badge tone="brand">{angle}</Badge> : null}
           </div>
           <h1 className="mt-1 truncate text-xl font-semibold tracking-tight">{project.title}</h1>
         </div>
         <div className="flex items-center gap-4 text-sm text-stone-600">
-          {project.audioDuration ? <span title="Narration length">⏱ {fmtTime(project.audioDuration)}</span> : null}
-          <span title="API spend on this video so far">
-            Spent {fmtUsd(data.cost)}
+          {project.audioDuration ? <span title={t("nav.project.narrationLength")}>⏱ {fmtTime(project.audioDuration)}</span> : null}
+          <span title={t("nav.project.spendTitle")}>
+            {t("nav.project.spent", { cost: fmtUsd(data.cost) })}
             {data.cliCalls ? (
-              <span className="text-stone-400" title="Calls that ran on your Claude / ChatGPT plan (no per-call charge)">
+              <span className="text-stone-400" title={t("nav.project.planCallsTitle")}>
                 {" "}
-                + {data.cliCalls} plan call{data.cliCalls === 1 ? "" : "s"}
+                {t(data.cliCalls === 1 ? "nav.project.planCallsOne" : "nav.project.planCallsOther", { count: data.cliCalls })}
               </span>
             ) : null}
           </span>
@@ -56,7 +59,7 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
       <AutopilotBar data={data} />
 
       <div className="flex flex-1 flex-col gap-6 py-6 lg:flex-row">
-        <nav aria-label="Pipeline steps" className="lg:w-52 lg:shrink-0">
+        <nav aria-label={t("nav.project.pipelineSteps")} className="lg:w-52 lg:shrink-0">
           <ol className="flex gap-1 overflow-x-auto lg:sticky lg:top-20 lg:flex-col">
             {stepsFor(channel.kind, project.voiceMode).map((s, i) => {
               const href = `/projects/${id}/${s.path}`;
@@ -94,8 +97,8 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
                     >
                       {busy ? <Loader2 className="size-3.5 animate-spin" /> : paused ? <Pause className="size-3.5" /> : stale ? <AlertTriangle className="size-3.5" /> : approved ? <Check className="size-3.5" /> : i + 1}
                     </span>
-                    <span>{s.label}</span>
-                    {stale ? <span className="sr-only">(needs review)</span> : null}
+                    <span>{stepLabel(t, s)}</span>
+                    {stale ? <span className="sr-only">{t("nav.project.needsReview")}</span> : null}
                   </Link>
                 </li>
               );

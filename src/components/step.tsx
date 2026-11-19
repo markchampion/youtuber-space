@@ -7,6 +7,7 @@ import { useProjectAction, type ProjectData } from "@/lib/client";
 import { stepsFor, type StepKey } from "@/lib/types";
 import type { Job } from "@/lib/db/schema";
 import { modelLabel } from "@/lib/claude-models";
+import { stepLabel, useT } from "@/lib/i18n";
 import { Button, ErrorNote, Progress } from "./ui";
 import { fmtBytes } from "./render-history";
 
@@ -49,13 +50,14 @@ export function StaleBanner({ data, step, children }: { data: ProjectData; step:
 }
 
 export function JobBar({ job }: { job?: Job }) {
+  const t = useT();
   if (!job) return null;
   if (job.status === "error") return <ErrorNote error={job.error} />;
   if (job.status !== "running") return null;
   return (
     <div className="rounded-lg bg-white p-3 ring-1 ring-stone-200">
       <div className="mb-1.5 flex justify-between text-xs text-stone-600">
-        <span>{job.message ?? "Working…"}</span>
+        <span>{job.message ?? t("nav.step.working")}</span>
         <span className="tabular-nums">{Math.round(job.progress * 100)}%</span>
       </div>
       <Progress value={job.progress} />
@@ -77,6 +79,7 @@ export function StepFooter({
   hint?: React.ReactNode;
   children?: React.ReactNode;
 }) {
+  const t = useT();
   const act = useProjectAction(data.project.id);
   const router = useRouter();
   const steps = stepsFor(data.channel.kind, data.project.voiceMode);
@@ -94,14 +97,14 @@ export function StepFooter({
         <div className="min-w-0 flex-1 text-sm text-stone-600">{children ?? hint}</div>
         {approved ? (
           <span className="flex items-center gap-1.5 text-sm font-medium text-emerald-700">
-            <CheckCircle2 className="size-4" /> Approved
+            <CheckCircle2 className="size-4" /> {t("nav.step.approved")}
           </span>
         ) : null}
         {approved && !next && data.generatedVideoBytes > 0 ? <CleanupButton data={data} /> : null}
         {approved && next ? (
           <Link href={`/projects/${data.project.id}/${next.path}`}>
             <Button variant="primary" icon={<ArrowRight className="size-4" />}>
-              {next.label}
+              {stepLabel(t, next)}
             </Button>
           </Link>
         ) : (
@@ -117,7 +120,7 @@ export function StepFooter({
             }
             icon={<CheckCircle2 className="size-4" />}
           >
-            {next ? "Approve & continue" : "Mark done"}
+            {next ? t("nav.step.approveContinue") : t("nav.step.markDone")}
           </Button>
         )}
       </div>
@@ -127,6 +130,7 @@ export function StepFooter({
 
 /** On a finished project: delete the rendered MP4s (video + Shorts) to free disk space; voice and images stay. */
 function CleanupButton({ data }: { data: ProjectData }) {
+  const t = useT();
   const act = useProjectAction(data.project.id);
   const size = fmtBytes(data.generatedVideoBytes);
   return (
@@ -135,12 +139,10 @@ function CleanupButton({ data }: { data: ProjectData }) {
       loading={act.isPending}
       icon={<Trash2 className="size-4" />}
       onClick={() =>
-        confirm(
-          `Delete the generated videos (${size})?\n\nThis removes every render of the video and its Shorts, including the render history. Voice, images and thumbnails are kept, so you can render again later.`,
-        ) && act.mutate({ action: "deleteGeneratedVideos" })
+        confirm(t("nav.step.cleanupConfirm", { size })) && act.mutate({ action: "deleteGeneratedVideos" })
       }
     >
-      Free {size}
+      {t("nav.step.free", { size })}
     </Button>
   );
 }

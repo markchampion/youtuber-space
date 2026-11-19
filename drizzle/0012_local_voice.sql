@@ -1,0 +1,1 @@
+ALTER TABLE `channels` ADD `local_voice_id` text;

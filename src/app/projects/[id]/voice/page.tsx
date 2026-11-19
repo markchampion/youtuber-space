@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useParams } from "next/navigation";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Mic, Pause, Play, Plus, RefreshCw, Search, Trash2, Volume2 } from "lucide-react";
@@ -9,13 +9,27 @@ import { DEFAULT_VOICE_SETTINGS, type VoiceSettings } from "@/lib/channel";
 import { getLanguage } from "@/lib/languages";
 import { JobBar, StaleBanner, StepFooter, StepHeader } from "@/components/step";
 import { Badge, Button, Card, EmptyState, ErrorNote, Input, Label, Select, Spinner, cn, fmtTime } from "@/components/ui";
+import { useT, type T, type TKey } from "@/lib/i18n";
 
-type Voice = { id: string; name: string; description?: string; previewUrl?: string; labels?: Record<string, string>; languages: string[] };
+/** Fill `{key}` in an already-translated text with a React node (e.g. a bold word). */
+function withNode(text: string, key: string, node: ReactNode) {
+  const [before, after] = text.split(`{${key}}`);
+  return (
+    <>
+      {before}
+      {node}
+      {after}
+    </>
+  );
+}
+
+type Voice = { id: string; name: string; description?: string; previewUrl?: string; labels?: Record<string, string>; languages: string[]; featured?: boolean };
 
 export default function VoicePage() {
   const { id } = useParams<{ id: string }>();
   const { data } = useProject(id);
   const act = useProjectAction(id);
+  const t = useT();
 
   if (!data) return <Spinner />;
   const needs = data.paragraphs.filter((p) => p.needsVoice);
@@ -28,16 +42,16 @@ export default function VoicePage() {
   return (
     <div>
       <StepHeader
-        title="Voice"
-        description="Each paragraph is voiced on its own, so re-doing one bad paragraph is cheap. The word timings that come back line the images up with the narration automatically."
+        title={t("voice.title")}
+        description={t("voice.description")}
       />
       <StaleBanner data={data} step="voice">
-        The script changed. Paragraphs marked <b>needs voice</b> will be re-generated, and unchanged ones are kept.
+        {withNode(t("voice.stale"), "needsVoice", <b>{t("voice.para.needsVoice")}</b>)}
       </StaleBanner>
 
       {!scriptApproved ? (
-        <EmptyState icon={<Mic className="size-8" />} title="Approve the script first">
-          Voicing starts from the approved script&apos;s paragraphs.
+        <EmptyState icon={<Mic className="size-8" />} title={t("voice.approveFirst")}>
+          {t("voice.approveFirstBody")}
         </EmptyState>
       ) : (
         <div className="grid gap-6 xl:grid-cols-[340px_minmax(0,1fr)]">
@@ -51,11 +65,11 @@ export default function VoicePage() {
               <div className="min-w-0 flex-1 text-sm">
                 {needs.length ? (
                   <>
-                    <span className="font-medium">{needs.length}</span> of {data.paragraphs.length} paragraphs need voicing
-                    <span className="text-stone-500"> · ~{needs.reduce((a, p) => a + p.text.length, 0).toLocaleString()} characters</span>
+                    {withNode(t("voice.needsOf", { total: data.paragraphs.length }), "count", <span className="font-medium">{needs.length}</span>)}
+                    <span className="text-stone-500">{t("voice.chars", { count: needs.reduce((a, p) => a + p.text.length, 0) })}</span>
                   </>
                 ) : (
-                  <span className="text-emerald-700">All {data.paragraphs.length} paragraphs are voiced and up to date.</span>
+                  <span className="text-emerald-700">{t("voice.allVoiced", { total: data.paragraphs.length })}</span>
                 )}
               </div>
               <Button
@@ -63,10 +77,10 @@ export default function VoicePage() {
                 icon={<Mic className="size-4" />}
                 loading={Boolean(running) || (act.isPending && act.variables?.action === "voice")}
                 disabled={!needs.length || !voiceId || Boolean(autopilot)}
-                title={!voiceId ? "Pick a voice first" : undefined}
+                title={!voiceId ? t("voice.pickFirst") : undefined}
                 onClick={() => act.mutate({ action: "voice" })}
               >
-                {data.project.audioPath ? "Voice changed paragraphs" : "Generate voice"}
+                {data.project.audioPath ? t("voice.voiceChanged") : t("voice.generate")}
               </Button>
               {data.project.renderPath ? (
                 <Button
@@ -74,12 +88,12 @@ export default function VoicePage() {
                   icon={<RefreshCw className="size-4" />}
                   loading={Boolean(autopilot) || (act.isPending && act.variables?.action === "revoice")}
                   disabled={!voiceId || Boolean(running)}
-                  title="Re-voice the changed paragraphs, then render the video again. Scenes and images are kept."
+                  title={t("voice.revoiceTitle")}
                   onClick={() => {
-                    if (confirm("Re-voice the changed paragraphs and render the video again?\n\nScenes and images are kept; only the narration and its timing change.")) act.mutate({ action: "revoice" });
+                    if (confirm(t("voice.revoiceConfirm"))) act.mutate({ action: "revoice" });
                   }}
                 >
-                  Re-voice &amp; re-render
+                  {t("voice.revoice")}
                 </Button>
               ) : null}
             </Card>
@@ -101,7 +115,7 @@ export default function VoicePage() {
         data={data}
         step="voice"
         canApprove={Boolean(data.project.audioPath) && !needs.length && !running}
-        hint="Listen through the full track. Click any sentence to jump to it."
+        hint={t("voice.footerHint")}
       />
     </div>
   );
@@ -144,7 +158,14 @@ function VoiceSettingsForm({
 }) {
   const qc = useQueryClient();
   const act = useProjectAction(data.project.id);
-  const voices = useQuery({ queryKey: ["voices"], queryFn: () => api<{ voices: Voice[] }>("/api/voices"), staleTime: 5 * 60_000 });
+  const t = useT();
+  const local = data.ttsBackend === "local";
+  const voices = useQuery({
+    queryKey: ["voices", data.ttsBackend],
+    queryFn: () => api<{ voices: Voice[] }>("/api/voices"),
+    staleTime: 5 * 60_000,
+    retry: local ? 0 : 1, // a stopped local server should say so right away
+  });
   const [settings, setSettings] = useState<VoiceSettings>(initialSettings);
   const saveChannel = useMutation({
     mutationFn: (body: Record<string, unknown>) => api("/api/channel", { method: "PUT", json: body }),
@@ -196,7 +217,7 @@ function VoiceSettingsForm({
   return (
     <Card className="space-y-4 p-4">
       <div className="flex items-center gap-2 font-medium">
-        <Volume2 className="size-4 text-stone-500" /> Voice
+        <Volume2 className="size-4 text-stone-500" /> {t("voice.settings.title")}
         <div className="ml-auto flex rounded-lg bg-stone-100 p-0.5 text-xs font-normal">
           {(["channel", "video"] as const).map((s) => (
             <button
@@ -205,37 +226,38 @@ function VoiceSettingsForm({
               onClick={() => setScope(s)}
               className={cn("rounded-md px-2 py-1", scope === s ? "bg-white shadow-sm ring-1 ring-stone-200" : "text-stone-500 hover:text-stone-800")}
             >
-              {s === "channel" ? "Channel default" : "This video only"}
+              {s === "channel" ? t("voice.settings.channelDefault") : t("voice.settings.videoOnly")}
             </button>
           ))}
         </div>
       </div>
       {scope === "video" ? (
         <div className="rounded-lg bg-orange-50 p-2.5 text-[12px] text-orange-900 ring-1 ring-orange-200">
-          {override ? "This video uses its own voice. Other videos keep the channel's." : "Changes here apply to this video only. Other videos keep the channel's voice."}
+          {override ? t("voice.settings.ownVoice") : t("voice.settings.videoOnlyNote")}
           {override ? (
             <div className="mt-1.5 flex flex-wrap gap-1">
               <Button size="sm" variant="ghost" onClick={() => act.mutate({ action: "makeVoiceDefault" })}>
-                Make channel default
+                {t("voice.settings.makeDefault")}
               </Button>
               <Button size="sm" variant="ghost" onClick={() => act.mutate({ action: "setVoiceOverride", override: null })}>
-                Reset to channel voice
+                {t("voice.settings.reset")}
               </Button>
             </div>
           ) : null}
         </div>
       ) : override ? (
-        <p className="text-[11px] text-stone-500">This video has its own voice, so channel changes don&apos;t affect it until you reset it.</p>
+        <p className="text-[11px] text-stone-500">{t("voice.settings.overrideNote")}</p>
       ) : null}
       <div>
-        <Label hint={scope === "channel" ? "saved for the channel" : "this video only"}>Narrator</Label>
+        <Label hint={scope === "channel" ? t("voice.settings.savedForChannel") : t("voice.settings.thisVideoOnly")}>{t("voice.settings.narrator")}</Label>
         <div className="flex gap-2">
           <Select value={voiceId ?? ""} onChange={(e) => save.mutate({ voiceId: e.target.value || null })} disabled={voices.isLoading}>
-            <option value="">{voices.isLoading ? "Loading voices…" : "Pick a voice"}</option>
+            <option value="">{voices.isLoading ? t("voice.settings.loadingVoices") : t("voice.settings.pickVoice")}</option>
             {sorted.map((v) => (
               <option key={v.id} value={v.id}>
-                {lang.code !== "en" && speaks(v) ? "✓ " : ""}
+                {local ? (v.featured ? "★ " : "") : lang.code !== "en" && speaks(v) ? "✓ " : ""}
                 {v.name}
+                {local && v.description ? ` · ${v.description}` : ""}
                 {v.labels?.accent ? ` · ${v.labels.accent}` : ""}
                 {v.labels?.gender ? ` · ${v.labels.gender}` : ""}
               </option>
@@ -244,7 +266,7 @@ function VoiceSettingsForm({
           {current?.previewUrl ? (
             <Button
               variant="secondary"
-              aria-label="Preview voice"
+              aria-label={t("voice.settings.preview")}
               onClick={() => {
                 preview.current?.pause();
                 preview.current = new Audio(current.previewUrl);
@@ -255,25 +277,34 @@ function VoiceSettingsForm({
           ) : null}
         </div>
         {voices.error ? <ErrorNote error={voices.error} /> : null}
-        {lang.code !== "en" ? (
+        {local ? (
           <p className="mt-1 text-[11px] text-stone-500">
-            ✓ = native/verified for {lang.name}. Other voices can read {lang.name} but with a foreign accent. Make sure the voice model in Settings supports{" "}
-            {lang.name} (Multilingual v2 covers 29 languages but not Vietnamese; Flash/Turbo v2.5 do).
+            {t("voice.settings.localNote")}
+            {voices.error ? (
+              <Button size="sm" variant="ghost" className="mt-1" icon={<RefreshCw className="size-3.5" />} onClick={() => voices.refetch()}>
+                {t("common.retry")}
+              </Button>
+            ) : null}
           </p>
         ) : null}
-        {lang.code !== "en" && voices.data && !voices.data.voices.some(speaks) && !finder ? (
+        {local ? null : lang.code !== "en" ? (
+          <p className="mt-1 text-[11px] text-stone-500">
+            {t("voice.settings.langNote", { lang: lang.name })}
+          </p>
+        ) : null}
+        {local ? null : lang.code !== "en" && voices.data && !voices.data.voices.some(speaks) && !finder ? (
           <div className="mt-2 rounded-lg bg-amber-50 p-3 text-[13px] text-amber-900 ring-1 ring-amber-200">
-            None of the voices in your ElevenLabs account are native {lang.name} speakers.
+            {t("voice.settings.noNative", { lang: lang.name })}
             <Button size="sm" variant="primary" className="mt-2 block" icon={<Search className="size-3.5" />} onClick={() => setFinder(true)}>
-              Find a {lang.name} voice
+              {t("voice.settings.find", { lang: lang.name })}
             </Button>
           </div>
         ) : (
           <Button size="sm" variant="ghost" className="mt-1" icon={<Search className="size-3.5" />} onClick={() => setFinder(!finder)}>
-            {finder ? "Hide voice library" : `Find a ${lang.name} voice`}
+            {finder ? t("voice.settings.hideLibrary") : t("voice.settings.find", { lang: lang.name })}
           </Button>
         )}
-        {finder ? (
+        {finder && !local ? (
           <VoiceLibrary
             language={lang.code}
             languageName={lang.name}
@@ -289,12 +320,16 @@ function VoiceSettingsForm({
           />
         ) : null}
       </div>
-      {slider("stability", "Stability", 0, 1, 0.05, "Lower = more expressive, higher = steadier")}
-      {slider("similarityBoost", "Similarity", 0, 1, 0.05, "How closely to match the original voice")}
-      {slider("style", "Style", 0, 1, 0.05, "Exaggeration; keep low for calm narration")}
-      {slider("speed", "Speed", 0.7, 1.2, 0.01, "1.00 = natural pace")}
+      {local ? null : (
+        <>
+          {slider("stability", t("voice.settings.stability"), 0, 1, 0.05, t("voice.settings.stabilityHint"))}
+          {slider("similarityBoost", t("voice.settings.similarity"), 0, 1, 0.05, t("voice.settings.similarityHint"))}
+          {slider("style", t("voice.settings.style"), 0, 1, 0.05, t("voice.settings.styleHint"))}
+          {slider("speed", t("voice.settings.speed"), 0.7, 1.2, 0.01, t("voice.settings.speedHint"))}
+        </>
+      )}
       <p className="text-[11px] text-stone-500">
-        Changing voice or settings marks every paragraph for re-voicing. Earlier takes are kept, so switching back costs nothing.
+        {t("voice.settings.changeNote")}
       </p>
     </Card>
   );
@@ -302,6 +337,7 @@ function VoiceSettingsForm({
 
 function PronunciationCard({ data }: { data: ProjectData }) {
   const qc = useQueryClient();
+  const t = useT();
   const [rows, setRows] = useState<[string, string][]>(Object.entries(data.channel.pronunciations ?? {}));
   const save = useMutation({
     mutationFn: (next: [string, string][]) =>
@@ -313,8 +349,8 @@ function PronunciationCard({ data }: { data: ProjectData }) {
   return (
     <Card className="space-y-3 p-4">
       <div>
-        <div className="font-medium">Pronunciations</div>
-        <p className="text-xs text-stone-500">Say names the way they should sound. Only the audio changes; the script and captions keep the real spelling.</p>
+        <div className="font-medium">{t("voice.pron.title")}</div>
+        <p className="text-xs text-stone-500">{t("voice.pron.help")}</p>
       </div>
       {rows.map(([k, v], i) => (
         <div key={i} className="flex items-center gap-1.5">
@@ -324,7 +360,7 @@ function PronunciationCard({ data }: { data: ProjectData }) {
           <Button
             size="sm"
             variant="ghost"
-            aria-label="Remove"
+            aria-label={t("common.remove")}
             onClick={() => {
               const next = rows.filter((_, k) => k !== i);
               setRows(next);
@@ -335,7 +371,7 @@ function PronunciationCard({ data }: { data: ProjectData }) {
         </div>
       ))}
       <Button size="sm" variant="ghost" onClick={() => setRows([...rows, ["", ""]])} icon={<Plus className="size-3.5" />}>
-        Add word
+        {t("voice.pron.add")}
       </Button>
     </Card>
   );
@@ -343,6 +379,7 @@ function PronunciationCard({ data }: { data: ProjectData }) {
 
 function ParagraphRow({ data, p, busy }: { data: ProjectData; p: ProjectData["paragraphs"][number]; busy: boolean }) {
   const act = useProjectAction(data.project.id);
+  const t = useT();
   const sentences = data.sentences.filter((s) => s.paragraphIdx === p.idx);
   const [playing, setPlaying] = useState(false);
   const audio = useRef<HTMLAudioElement | null>(null);
@@ -354,7 +391,7 @@ function ParagraphRow({ data, p, busy }: { data: ProjectData; p: ProjectData["pa
           size="sm"
           variant="secondary"
           disabled={!p.audioUrl}
-          aria-label={playing ? "Pause paragraph" : "Play paragraph"}
+          aria-label={playing ? t("voice.para.pause") : t("voice.para.play")}
           onClick={() => {
             if (!p.audioUrl) return;
             if (!audio.current || audio.current.src !== new URL(p.audioUrl, location.href).href) {
@@ -372,13 +409,13 @@ function ParagraphRow({ data, p, busy }: { data: ProjectData; p: ProjectData["pa
           <div className="mb-1 flex flex-wrap items-center gap-2 text-xs text-stone-500">
             <span>¶ {p.idx + 1}</span>
             {p.status === "generating" ? (
-              <Badge tone="brand">voicing…</Badge>
+              <Badge tone="brand">{t("voice.para.voicing")}</Badge>
             ) : p.status === "error" ? (
-              <Badge tone="red">error</Badge>
+              <Badge tone="red">{t("voice.para.error")}</Badge>
             ) : p.needsVoice ? (
-              <Badge tone="amber">needs voice</Badge>
+              <Badge tone="amber">{t("voice.para.needsVoice")}</Badge>
             ) : (
-              <Badge tone="green">{p.sampleCount && p.sampleRate ? fmtTime(p.sampleCount / p.sampleRate) : "done"}</Badge>
+              <Badge tone="green">{p.sampleCount && p.sampleRate ? fmtTime(p.sampleCount / p.sampleRate) : t("voice.para.done")}</Badge>
             )}
           </div>
           <p className="text-[14px] leading-6 text-stone-800">{p.text}</p>
@@ -401,7 +438,7 @@ function ParagraphRow({ data, p, busy }: { data: ProjectData; p: ProjectData["pa
           onClick={() => act.mutate({ action: "voice", paragraphIds: [p.id] })}
           icon={<RefreshCw className="size-3.5" />}
         >
-          Redo
+          {t("voice.para.redo")}
         </Button>
       </div>
     </Card>
@@ -411,6 +448,7 @@ function ParagraphRow({ data, p, busy }: { data: ProjectData; p: ProjectData["pa
 /** Full stitched track with the spoken sentence highlighted (karaoke-style). */
 function FullTrack({ data }: { data: ProjectData }) {
   const act = useProjectAction(data.project.id);
+  const tr = useT();
   const audio = useRef<HTMLAudioElement>(null);
   const [t, setT] = useState(0);
   const [pause, setPauseMs] = useState(data.project.pauseMs);
@@ -438,10 +476,10 @@ function FullTrack({ data }: { data: ProjectData }) {
   return (
     <Card className="p-4">
       <div className="mb-3 flex flex-wrap items-center gap-3">
-        <div className="font-medium">Full narration</div>
+        <div className="font-medium">{tr("voice.track.title")}</div>
         <span className="text-sm tabular-nums text-stone-500">{fmtTime(data.project.audioDuration)}</span>
         <div className="ml-auto flex items-center gap-2 text-xs text-stone-600">
-          <label htmlFor="pause">Pause between paragraphs</label>
+          <label htmlFor="pause">{tr("voice.track.pause")}</label>
           <input
             id="pause"
             type="range"
@@ -501,13 +539,12 @@ type LibraryVoice = {
 };
 
 type LibrarySort = "usage_character_count_1y" | "trending" | "cloned_by_count" | "created_date";
-const SORTS: { value: LibrarySort; label: string }[] = [
-  { value: "usage_character_count_1y", label: "Sort: most used this year" },
-  { value: "trending", label: "Sort: trending this week" },
-  { value: "cloned_by_count", label: "Sort: most added by users" },
-  { value: "created_date", label: "Sort: newest" },
+const SORTS: { value: LibrarySort; label: TKey }[] = [
+  { value: "usage_character_count_1y", label: "voice.library.sortUsage" },
+  { value: "trending", label: "voice.library.sortTrending" },
+  { value: "cloned_by_count", label: "voice.library.sortCloned" },
+  { value: "created_date", label: "voice.library.sortNewest" },
 ];
-const compact = new Intl.NumberFormat("en", { notation: "compact", maximumFractionDigits: 1 });
 
 /** Browse the ElevenLabs Voice Library for native speakers of the channel language. */
 function VoiceLibrary({
@@ -521,6 +558,8 @@ function VoiceLibrary({
   onPreview: (url: string) => void;
   onPicked: (voiceId: string) => void;
 }) {
+  const t = useT();
+  const compact = useMemo(() => new Intl.NumberFormat(t.locale, { notation: "compact", maximumFractionDigits: 1 }), [t.locale]);
   const [gender, setGender] = useState("");
   const [draft, setDraft] = useState("");
   const [search, setSearch] = useState("");
@@ -549,26 +588,20 @@ function VoiceLibrary({
 
   return (
     <div className="mt-2 space-y-2 rounded-lg bg-stone-50 p-3 ring-1 ring-stone-200">
-      <div className="text-[13px] font-medium">{languageName} voices in the ElevenLabs Voice Library</div>
+      <div className="text-[13px] font-medium">{t("voice.library.title", { lang: languageName })}</div>
       <p className="text-[11px] text-stone-500">
-        Browsing and previews are free. &quot;Use this voice&quot; adds it to your ElevenLabs account (one voice slot) and picks it for this channel.
-        {plan ? (
-          <>
-            {" "}
-            Your ElevenLabs plan: <b className="capitalize">{plan.replace(/_/g, " ")}</b>.
-          </>
-        ) : null}
+        {t("voice.library.intro")}
+        {plan ? withNode(t("voice.library.plan"), "plan", <b className="capitalize">{plan.replace(/_/g, " ")}</b>) : null}
       </p>
       {plan === "free" ? (
         <div className="rounded-md bg-amber-50 p-2 text-[12px] text-amber-900 ring-1 ring-amber-200">
-          You&apos;re on the ElevenLabs <b>Free</b> plan, which can&apos;t use Voice Library voices from apps like this one. You can still preview them here. To use
-          one, upgrade to a paid ElevenLabs plan (Starter or above); until then, pick a default voice in the Narrator list.
+          {withNode(t("voice.library.freePlan"), "free", <b>{t("voice.library.freeName")}</b>)}
         </div>
       ) : null}
       <div className="flex flex-wrap gap-1.5 text-[11px] text-stone-600">
-        <Badge tone="green">Free</Badge> included in any paid plan, uses normal credits
-        <Badge tone="blue">Paid plan</Badge> needs a paid ElevenLabs plan
-        <Badge tone="amber">Extra cost</Badge> charges on top of your plan
+        <Badge tone="green">{t("voice.cost.free")}</Badge> {t("voice.library.legendFree")}
+        <Badge tone="blue">{t("voice.cost.paid")}</Badge> {t("voice.library.legendPaid")}
+        <Badge tone="amber">{t("voice.cost.extraShort")}</Badge> {t("voice.library.legendExtra")}
       </div>
       {/* Lives in a narrow (340 px) column: search on its own row, then two filters per row. */}
       <form
@@ -579,24 +612,24 @@ function VoiceLibrary({
         }}
       >
         <div className="flex gap-1.5">
-          <Input className="min-w-0 flex-1" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Search, e.g. narrator, calm, story" />
-          <Button type="submit" size="sm" variant="secondary" icon={<Search className="size-3.5" />} aria-label="Search" />
+          <Input className="min-w-0 flex-1" value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={t("voice.library.searchPlaceholder")} />
+          <Button type="submit" size="sm" variant="secondary" icon={<Search className="size-3.5" />} aria-label={t("voice.library.search")} />
         </div>
         <div className="grid grid-cols-2 gap-1.5">
-          <Select className="w-full min-w-0" value={gender} onChange={(e) => setGender(e.target.value)} aria-label="Gender">
-            <option value="">Any gender</option>
-            <option value="female">Female</option>
-            <option value="male">Male</option>
+          <Select className="w-full min-w-0" value={gender} onChange={(e) => setGender(e.target.value)} aria-label={t("voice.library.gender")}>
+            <option value="">{t("voice.library.anyGender")}</option>
+            <option value="female">{t("voice.library.female")}</option>
+            <option value="male">{t("voice.library.male")}</option>
           </Select>
-          <Select className="w-full min-w-0" value={price} onChange={(e) => setPrice(e.target.value as typeof price)} aria-label="Price">
-            <option value="">Any price</option>
-            <option value="free">No extra cost</option>
-            <option value="included">On my plan</option>
+          <Select className="w-full min-w-0" value={price} onChange={(e) => setPrice(e.target.value as typeof price)} aria-label={t("voice.library.price")}>
+            <option value="">{t("voice.library.anyPrice")}</option>
+            <option value="free">{t("voice.library.noExtra")}</option>
+            <option value="included">{t("voice.library.onPlan")}</option>
           </Select>
-          <Select className="col-span-2 w-full min-w-0" value={sort} onChange={(e) => setSort(e.target.value as LibrarySort)} aria-label="Sort">
+          <Select className="col-span-2 w-full min-w-0" value={sort} onChange={(e) => setSort(e.target.value as LibrarySort)} aria-label={t("voice.library.sort")}>
             {SORTS.map((o) => (
               <option key={o.value} value={o.value}>
-                {o.label}
+                {t(o.label)}
               </option>
             ))}
           </Select>
@@ -605,7 +638,7 @@ function VoiceLibrary({
       <ErrorNote error={lib.error ?? add.error} />
       {lib.isLoading ? <Spinner /> : null}
       {!lib.isLoading && !list.length && !lib.error ? (
-        <p className="text-[13px] text-stone-500">{all.length ? "No voices match this price filter on the loaded pages. Try Load more." : "No voices found. Try another search."}</p>
+        <p className="text-[13px] text-stone-500">{all.length ? t("voice.library.noMatch") : t("voice.library.noneFound")}</p>
       ) : null}
       <ul className="max-h-96 space-y-1.5 overflow-y-auto">
         {list.map((v) => (
@@ -616,7 +649,7 @@ function VoiceLibrary({
                 variant="secondary"
                 disabled={!v.previewUrl}
                 onClick={() => v.previewUrl && onPreview(v.previewUrl)}
-                aria-label={`Preview ${v.name}`}
+                aria-label={t("voice.library.previewName", { name: v.name })}
                 icon={<Play className="size-3.5" />}
               />
               <div className="min-w-0 flex-1">
@@ -629,24 +662,24 @@ function VoiceLibrary({
               </div>
             </div>
             <div className="flex flex-wrap items-center gap-1">
-              {v.isAddedByUser ? <Badge tone="green">in your account</Badge> : null}
-              <PriceBadge cost={costOf(v, plan)} />
+              {v.isAddedByUser ? <Badge tone="green">{t("voice.library.inAccount")}</Badge> : null}
+              <PriceBadge t={t} cost={costOf(v, plan)} />
               {sort === "trending" ? (
-                v.usage7d > 0 ? <Badge title="Characters spoken with this voice on ElevenLabs in the last 7 days">{compact.format(v.usage7d)} chars/wk</Badge> : null
+                v.usage7d > 0 ? <Badge title={t("voice.library.weekTitle")}>{t("voice.library.perWeek", { n: compact.format(v.usage7d) })}</Badge> : null
               ) : v.usage1y > 0 ? (
-                <Badge title="Characters spoken with this voice on ElevenLabs in the last year">{compact.format(v.usage1y)} chars/yr</Badge>
+                <Badge title={t("voice.library.yearTitle")}>{t("voice.library.perYear", { n: compact.format(v.usage1y) })}</Badge>
               ) : null}
-              {v.clonedByCount > 0 ? <Badge>{compact.format(v.clonedByCount)} users</Badge> : null}
+              {v.clonedByCount > 0 ? <Badge>{t("voice.library.users", { n: compact.format(v.clonedByCount) })}</Badge> : null}
               <Button
                 size="sm"
                 variant="primary"
                 className="ml-auto"
                 loading={add.isPending && add.variables?.voiceId === v.voiceId}
                 disabled={add.isPending || costOf(v, plan).kind === "blocked"}
-                title={costOf(v, plan).kind === "blocked" ? "The ElevenLabs Free plan can't use library voices from apps" : undefined}
+                title={costOf(v, plan).kind === "blocked" ? t("voice.library.blockedTitle") : undefined}
                 onClick={() => add.mutate(v)}
               >
-                Use this voice
+                {t("voice.library.use")}
               </Button>
             </div>
           </li>
@@ -654,7 +687,7 @@ function VoiceLibrary({
       </ul>
       {lib.hasNextPage ? (
         <Button size="sm" variant="ghost" loading={lib.isFetchingNextPage} onClick={() => lib.fetchNextPage()}>
-          Load more
+          {t("voice.library.loadMore")}
         </Button>
       ) : null}
     </div>
@@ -672,9 +705,9 @@ function costOf(v: LibraryVoice, plan: string | null): VoiceCost {
   return { kind: "free" };
 }
 
-function PriceBadge({ cost }: { cost: VoiceCost }) {
-  if (cost.kind === "extra") return <Badge tone="amber">Extra cost: +${cost.rate!.toFixed(2)} per 1,000 characters</Badge>;
-  if (cost.kind === "blocked") return <Badge tone="red">Needs a paid plan</Badge>;
-  if (cost.kind === "paid") return <Badge tone="blue">Paid plan</Badge>;
-  return <Badge tone="green">Free</Badge>;
+function PriceBadge({ t, cost }: { t: T; cost: VoiceCost }) {
+  if (cost.kind === "extra") return <Badge tone="amber">{t("voice.cost.extra", { rate: cost.rate!.toFixed(2) })}</Badge>;
+  if (cost.kind === "blocked") return <Badge tone="red">{t("voice.cost.blocked")}</Badge>;
+  if (cost.kind === "paid") return <Badge tone="blue">{t("voice.cost.paid")}</Badge>;
+  return <Badge tone="green">{t("voice.cost.free")}</Badge>;
 }

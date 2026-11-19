@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Download, Play, Trash2 } from "lucide-react";
 import { useProjectAction, type RenderRow } from "@/lib/client";
+import { useT, type T } from "@/lib/i18n";
 import { Badge, Button, ErrorNote, cn, fmtTime } from "./ui";
 
 export function fmtBytes(n: number | null | undefined) {
@@ -10,21 +11,23 @@ export function fmtBytes(n: number | null | undefined) {
   return n > 1e9 ? `${(n / 1e9).toFixed(1)} GB` : `${(n / 1e6).toFixed(1)} MB`;
 }
 
-export function fmtWhen(iso: string) {
+export function fmtWhen(iso: string, t: T) {
   const d = new Date(iso);
   const today = new Date().toDateString() === d.toDateString();
-  const time = d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-  return today ? `Today ${time}` : `${d.toLocaleDateString([], { month: "short", day: "numeric" })} ${time}`;
+  // English keeps the browser's own date format; Vietnamese spells the month in Vietnamese.
+  const loc = t.locale === "vi" ? "vi" : [];
+  const time = d.toLocaleTimeString(loc, { hour: "2-digit", minute: "2-digit" });
+  return today ? t("nav.renders.today", { time }) : `${d.toLocaleDateString(loc, { month: "short", day: "numeric" })} ${time}`;
 }
 
-function optionChips(o: RenderRow["options"]) {
+function optionChips(o: RenderRow["options"], t: T) {
   if (!o) return [];
   const chips: string[] = [];
   if (typeof o.speed === "number" && o.speed !== 1) chips.push(`${o.speed}×`);
   if (o.layout) chips.push(String(o.layout));
-  if (o.captions) chips.push("captions");
-  if (o.kenBurns === false) chips.push("no zoom");
-  if (o.watermark) chips.push("watermark");
+  if (o.captions) chips.push(t("nav.renders.chipCaptions"));
+  if (o.kenBurns === false) chips.push(t("nav.renders.chipNoZoom"));
+  if (o.watermark) chips.push(t("nav.renders.chipWatermark"));
   return chips;
 }
 
@@ -40,6 +43,7 @@ export function RenderHistory({
   vertical?: boolean;
   hideCurrent?: boolean;
 }) {
+  const t = useT();
   const act = useProjectAction(projectId);
   const [playing, setPlaying] = useState<string | null>(null);
   const rows = hideCurrent ? renders.filter((r) => !r.current) : renders;
@@ -52,17 +56,17 @@ export function RenderHistory({
         {rows.map((r) => (
           <li key={r.id} className="py-2">
             <div className="flex flex-wrap items-center gap-2 text-sm">
-              <span className="font-medium tabular-nums">{fmtWhen(r.createdAt)}</span>
-              {r.current ? <Badge tone="green">Current</Badge> : null}
+              <span className="font-medium tabular-nums">{fmtWhen(r.createdAt, t)}</span>
+              {r.current ? <Badge tone="green">{t("nav.current")}</Badge> : null}
               <span className="text-xs tabular-nums text-stone-500">
                 {r.durationSec ? fmtTime(r.durationSec) : ""} · {fmtBytes(r.sizeBytes)}
               </span>
-              {optionChips(r.options).map((c) => (
+              {optionChips(r.options, t).map((c) => (
                 <Badge key={c}>{c}</Badge>
               ))}
               <div className="ml-auto flex items-center gap-1">
                 <Button size="sm" variant="ghost" onClick={() => setPlaying(playing === r.id ? null : r.id)} icon={<Play className="size-3.5" />}>
-                  {playing === r.id ? "Hide" : "Play"}
+                  {playing === r.id ? t("nav.renders.hide") : t("nav.renders.play")}
                 </Button>
                 {r.url ? (
                   <a href={`${r.url}?download=1`}>
@@ -80,9 +84,9 @@ export function RenderHistory({
                   size="sm"
                   variant="ghost"
                   className="text-stone-400 hover:text-red-600"
-                  aria-label="Delete render"
+                  aria-label={t("nav.renders.deleteLabel")}
                   loading={act.isPending && act.variables?.renderId === r.id}
-                  onClick={() => confirm("Delete this render file?") && act.mutate({ action: "deleteRender", renderId: r.id })}
+                  onClick={() => confirm(t("nav.renders.deleteConfirm")) && act.mutate({ action: "deleteRender", renderId: r.id })}
                   icon={<Trash2 className="size-3.5" />}
                 />
               </div>
@@ -94,7 +98,7 @@ export function RenderHistory({
         ))}
       </ul>
       <div className="mt-1 text-xs text-stone-500">
-        {renders.length} render{renders.length === 1 ? "" : "s"} · {fmtBytes(total)} on disk
+        {t(renders.length === 1 ? "nav.renders.totalOne" : "nav.renders.totalOther", { count: renders.length, size: fmtBytes(total) })}
       </div>
       <ErrorNote error={act.error} />
     </div>

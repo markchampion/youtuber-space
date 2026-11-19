@@ -139,7 +139,7 @@ export type AutopilotState = {
 };
 
 /** A voice for one video only; anything missing falls back to the channel's. */
-export type VoiceOverride = { voiceId?: string | null; settings?: VoiceSettings | null };
+export type VoiceOverride = { voiceId?: string | null; localVoiceId?: string | null; settings?: VoiceSettings | null };
 
 export function channelKind(p: ChannelProfile): ChannelKind {
   return p.kind === "product_ad" ? "product_ad" : "longform";

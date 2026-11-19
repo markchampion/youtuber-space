@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { Fragment, useMemo, useState, type ReactNode } from "react";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Player } from "@remotion/player";
@@ -12,13 +12,20 @@ import type { ShortProps } from "@/remotion/types";
 import { JobBar, StaleBanner, StepFooter, StepHeader } from "@/components/step";
 import { RenderHistory } from "@/components/render-history";
 import { Badge, Button, Card, CopyButton, EmptyState, ErrorNote, Input, Label, Select, Spinner, Textarea, cn, fmtTime, useInView, useSyncedState } from "@/components/ui";
+import { useT } from "@/lib/i18n";
 
 type ShortRow = ProjectData["shorts"][number];
+
+/** Fills `{name}` slots of a translated sentence with React nodes (e.g. bold words). */
+function rich(text: string, parts: Record<string, ReactNode>): ReactNode {
+  return text.split(/\{(\w+)\}/).map((s, i) => (i % 2 ? <Fragment key={i}>{parts[s] ?? `{${s}}`}</Fragment> : s));
+}
 
 export default function ShortsPage() {
   const { id } = useParams<{ id: string }>();
   const { data } = useProject(id);
   const act = useProjectAction(id);
+  const t = useT();
   const [seriesOpen, setSeriesOpen] = useState(false);
   if (!data) return <Spinner />;
 
@@ -28,9 +35,9 @@ export default function ShortsPage() {
   return (
     <div>
       <StepHeader
-        title="Shorts"
-        description="Vertical 9:16 clips for YouTube Shorts, TikTok and Reels, cut from this video. They reuse its narration and images, so they cost almost nothing."
-        models={[{ label: "Clip picking", model: data.models.shorts }]}
+        title={t("common.steps.shorts")}
+        description={t("media.shorts.description")}
+        models={[{ label: t("media.shorts.clipPicking"), model: data.models.shorts }]}
         actions={
           <>
             <Button
@@ -39,16 +46,16 @@ export default function ShortsPage() {
               onClick={() => act.mutate({ action: "createShort", fromSentence: 0 })}
               icon={<Plus className="size-4" />}
             >
-              New Short
+              {t("media.shorts.newShort")}
             </Button>
             <Button
               variant="secondary"
               disabled={!hasVoice}
               onClick={() => setSeriesOpen(!seriesOpen)}
               icon={<ListOrdered className="size-4" />}
-              title="Consecutive parts that follow each other: Part 1, Part 2, …"
+              title={t("media.shorts.seriesTitle")}
             >
-              Make a series
+              {t("media.shorts.makeSeries")}
             </Button>
             <Button
               variant="primary"
@@ -57,25 +64,28 @@ export default function ShortsPage() {
               onClick={() => act.mutate({ action: "suggestShorts", count: 3 })}
               icon={<Sparkles className="size-4" />}
             >
-              Suggest Shorts
+              {t("media.shorts.suggest")}
             </Button>
           </>
         }
       />
       <StaleBanner data={data} step="shorts">
-        The voice or images changed. Re-render your Shorts so they match.
+        {t("media.shorts.stale")}
       </StaleBanner>
       <ErrorNote error={act.error} />
       {seriesOpen && hasVoice ? <SeriesForm data={data} onDone={() => setSeriesOpen(false)} /> : null}
 
       {!hasVoice ? (
-        <EmptyState icon={<Smartphone className="size-8" />} title="Generate the voice first">
-          Shorts are cut from this video&apos;s narration, so they need the voice step done.
+        <EmptyState icon={<Smartphone className="size-8" />} title={t("media.shorts.needsVoiceTitle")}>
+          {t("media.shorts.needsVoiceBody")}
         </EmptyState>
       ) : !data.shorts.length ? (
-        <EmptyState icon={<Smartphone className="size-8" />} title="No Shorts yet">
-          <b>Suggest Shorts</b> picks the 3 best stand-alone 30–60 s moments and writes a hook title, caption and hashtags for each. <b>Make a series</b> cuts the
-          whole video into consecutive parts (Part 1, Part 2, …). Or use <b>New Short</b> and pick the sentences yourself.
+        <EmptyState icon={<Smartphone className="size-8" />} title={t("media.shorts.emptyTitle")}>
+          {rich(t("media.shorts.emptyBody"), {
+            suggest: <b>{t("media.shorts.suggest")}</b>,
+            series: <b>{t("media.shorts.makeSeries")}</b>,
+            newShort: <b>{t("media.shorts.newShort")}</b>,
+          })}
         </EmptyState>
       ) : (
         <div className="space-y-4">
@@ -85,7 +95,7 @@ export default function ShortsPage() {
         </div>
       )}
 
-      <StepFooter data={data} step="shorts" canApprove hint="Optional. Render the Shorts you want, then upload each to Shorts, TikTok and Reels." />
+      <StepFooter data={data} step="shorts" canApprove hint={t("media.shorts.footerHint")} />
     </div>
   );
 }
@@ -94,9 +104,10 @@ const PART_LENGTHS = [30, 45, 60, 90, 120, 180];
 const SPEEDS = [1, 1.1, 1.15, 1.2, 1.25, 1.3];
 
 function SpeedSelect({ value, videoSpeed, onChange, className }: { value: number | null; videoSpeed: number; onChange: (v: number | null) => void; className?: string }) {
+  const t = useT();
   return (
-    <Select aria-label="Speed" className={className} value={value ?? ""} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
-      <option value="">Same as video ({videoSpeed}×)</option>
+    <Select aria-label={t("media.shorts.speed")} className={className} value={value ?? ""} onChange={(e) => onChange(e.target.value ? Number(e.target.value) : null)}>
+      <option value="">{t("media.shorts.sameAsVideo", { speed: String(videoSpeed) })}</option>
       {SPEEDS.map((r) => (
         <option key={r} value={r}>
           {r}×
@@ -109,6 +120,7 @@ function SpeedSelect({ value, videoSpeed, onChange, className }: { value: number
 /** Choose part length, number of parts and speed; shows how the video would be cut before creating anything. */
 function SeriesForm({ data, onDone }: { data: ProjectData; onDone: () => void }) {
   const act = useProjectAction(data.project.id);
+  const t = useT();
   const [partSeconds, setPartSeconds] = useState(60);
   const [maxParts, setMaxParts] = useState<number | null>(null);
   const [speed, setSpeed] = useState<number | null>(null);
@@ -123,55 +135,52 @@ function SeriesForm({ data, onDone }: { data: ProjectData; onDone: () => void })
     ).map((p) => (data.sentences[p.toSentence].end! - data.sentences[p.fromSentence].start!) / rate);
   }, [data.sentences, partSeconds, maxParts, rate]);
   const creating = act.isPending;
-  const range = parts.length ? `${Math.round(Math.min(...parts))}–${Math.round(Math.max(...parts))} s each` : "";
+  const range = parts.length ? t("media.shorts.rangeEach", { min: Math.round(Math.min(...parts)), max: Math.round(Math.max(...parts)) }) : "";
 
   return (
     <Card className="mb-4 space-y-3 p-4">
       <div>
-        <div className="font-medium">Make a series</div>
+        <div className="font-medium">{t("media.shorts.makeSeries")}</div>
         <p className="text-[13px] text-stone-600">
-          Cuts the video into consecutive parts in story order. Each part shows &quot;PART 2/10&quot; at the top and &quot;Part 3 next →&quot; at the end; the last
-          one points to the full video. Cuts land on sentence and paragraph ends.
+          {t("media.shorts.seriesHelp")}
         </p>
       </div>
       <div className="flex flex-wrap items-end gap-3">
         <div>
-          <Label>Part length</Label>
+          <Label>{t("media.shorts.partLength")}</Label>
           <Select className="w-32" value={partSeconds} onChange={(e) => setPartSeconds(Number(e.target.value))}>
             {PART_LENGTHS.map((n) => (
               <option key={n} value={n}>
-                {n < 120 ? `${n} s` : `${n / 60} min`}
+                {n < 120 ? t("media.shorts.seconds", { n }) : t("media.shorts.minutes", { n: n / 60 })}
               </option>
             ))}
           </Select>
         </div>
         <div>
-          <Label>Parts</Label>
+          <Label>{t("media.shorts.parts")}</Label>
           <Select className="w-40" value={maxParts ?? ""} onChange={(e) => setMaxParts(e.target.value ? Number(e.target.value) : null)}>
-            <option value="">Whole video</option>
+            <option value="">{t("media.shorts.wholeVideo")}</option>
             {[1, 2, 3, 4, 5, 6, 8, 10].map((n) => (
               <option key={n} value={n}>
-                First {n}
+                {t("media.shorts.firstN", { n })}
               </option>
             ))}
           </Select>
         </div>
         <div>
-          <Label>Speed</Label>
+          <Label>{t("media.shorts.speed")}</Label>
           <SpeedSelect className="w-48" value={speed} videoSpeed={videoSpeed} onChange={setSpeed} />
         </div>
         <div className="pb-2 text-sm text-stone-600">
           {parts.length ? (
-            <>
-              ≈ <b>{parts.length}</b> part{parts.length === 1 ? "" : "s"}, {range}
-            </>
+            rich(t(parts.length === 1 ? "media.shorts.partsOne" : "media.shorts.partsMany", { range }), { count: <b>{parts.length}</b> })
           ) : (
-            "Voice timings missing"
+            t("media.shorts.timingsMissing")
           )}
         </div>
         <div className="ml-auto flex gap-2">
           <Button variant="ghost" onClick={onDone}>
-            Cancel
+            {t("common.cancel")}
           </Button>
           <Button
             variant="primary"
@@ -180,7 +189,7 @@ function SeriesForm({ data, onDone }: { data: ProjectData; onDone: () => void })
             onClick={() => act.mutate({ action: "createSeries", partSeconds, maxParts, speed }, { onSuccess: onDone })}
             icon={<ListOrdered className="size-4" />}
           >
-            Create {parts.length || ""} parts
+            {parts.length ? t("media.shorts.createParts", { count: parts.length }) : t("media.shorts.createPartsNone")}
           </Button>
         </div>
       </div>
@@ -192,6 +201,7 @@ function SeriesForm({ data, onDone }: { data: ProjectData; onDone: () => void })
 function ShortCard({ data, short }: { data: ProjectData; short: ShortRow }) {
   const projectId = data.project.id;
   const act = useProjectAction(projectId);
+  const t = useT();
   const [title, setTitle] = useSyncedState(short.title);
   const [caption, setCaption] = useSyncedState(short.caption ?? "");
   const [hashtags, setHashtags] = useSyncedState(short.hashtags ?? "");
@@ -255,7 +265,7 @@ function ShortCard({ data, short }: { data: ProjectData; short: ShortRow }) {
       <div className="min-w-0 space-y-3">
         <div className="flex flex-wrap items-start gap-2">
           <div className="min-w-0 flex-1">
-            <Label hint={short.part && short.partsTotal ? <Badge tone="brand">Part {short.part}/{short.partsTotal}</Badge> : undefined}>Hook title (on screen)</Label>
+            <Label hint={short.part && short.partsTotal ? <Badge tone="brand">{t("media.shorts.partBadge", { part: short.part, total: short.partsTotal })}</Badge> : undefined}>{t("media.shorts.hookTitle")}</Label>
             <Input
               value={title}
               onChange={(e) => setTitle(e.target.value)}
@@ -267,19 +277,19 @@ function ShortCard({ data, short }: { data: ProjectData; short: ShortRow }) {
             size="sm"
             variant="ghost"
             className="mt-6 text-stone-400 hover:text-red-600"
-            aria-label="Delete Short"
-            onClick={() => confirm("Delete this Short?") && act.mutate({ action: "deleteShort", shortId: short.id })}
+            aria-label={t("media.shorts.deleteShort")}
+            onClick={() => confirm(t("media.shorts.confirmDelete")) && act.mutate({ action: "deleteShort", shortId: short.id })}
             icon={<Trash2 className="size-4" />}
           />
         </div>
         {short.reason ? <p className="text-[13px] italic text-stone-500">{short.reason}</p> : null}
 
         <div>
-          <Label hint={<Badge tone={durationTone}>{d.toFixed(0)} s{short.speed !== 1 ? ` at ${short.speed}×` : ""}{" "}
-                {d > 180 ? "· over the 3-min Shorts limit" : d > 60 ? "· fine for YouTube Shorts; TikTok/Reels prefer shorter" : d < 15 ? "· very short" : ""}</Badge>}>Clip</Label>
+          <Label hint={<Badge tone={durationTone}>{short.speed !== 1 ? t("media.shorts.durationAt", { seconds: d.toFixed(0), speed: String(short.speed) }) : t("media.shorts.duration", { seconds: d.toFixed(0) })}{" "}
+                {d > 180 ? t("media.shorts.overLimit") : d > 60 ? t("media.shorts.longOk") : d < 15 ? t("media.shorts.veryShort") : ""}</Badge>}>{t("media.shorts.clip")}</Label>
           <div className="grid gap-2 sm:grid-cols-2">
             <Select
-              aria-label="First sentence"
+              aria-label={t("media.shorts.firstSentence")}
               className="h-9 text-[13px]"
               value={short.fromSentence}
               onChange={(e) => {
@@ -289,15 +299,15 @@ function ShortCard({ data, short }: { data: ProjectData; short: ShortRow }) {
             >
               {data.sentences.map((s, i) => (
                 <option key={s.id} value={i}>
-                  From {sentenceLabel(i)}
+                  {t("media.shorts.from", { label: sentenceLabel(i) })}
                 </option>
               ))}
             </Select>
-            <Select aria-label="Last sentence" className="h-9 text-[13px]" value={short.toSentence} onChange={(e) => update({ toSentence: Number(e.target.value) })}>
+            <Select aria-label={t("media.shorts.lastSentence")} className="h-9 text-[13px]" value={short.toSentence} onChange={(e) => update({ toSentence: Number(e.target.value) })}>
               {data.sentences.map((s, i) =>
                 i >= short.fromSentence ? (
                   <option key={s.id} value={i}>
-                    To {sentenceLabel(i)}
+                    {t("media.shorts.to", { label: sentenceLabel(i) })}
                   </option>
                 ) : null,
               )}
@@ -306,7 +316,7 @@ function ShortCard({ data, short }: { data: ProjectData; short: ShortRow }) {
         </div>
 
         <div>
-          <Label hint="voice pitch stays natural">Speed</Label>
+          <Label hint={t("media.shorts.pitchHint")}>{t("media.shorts.speed")}</Label>
           <SpeedSelect
             className="h-9 w-52 text-[13px]"
             value={short.playbackRate}
@@ -316,9 +326,9 @@ function ShortCard({ data, short }: { data: ProjectData; short: ShortRow }) {
         </div>
 
         <div>
-          <Label>Layout</Label>
+          <Label>{t("media.shorts.layout")}</Label>
           <div className="flex flex-wrap items-center gap-2">
-            <div role="radiogroup" aria-label="Layout" className="inline-flex rounded-lg bg-stone-200/70 p-1">
+            <div role="radiogroup" aria-label={t("media.shorts.layout")} className="inline-flex rounded-lg bg-stone-200/70 p-1">
               {(["stacked", "fullscreen"] as const).map((l) => {
                 const disabled = l === "fullscreen" && missingVertical > 0;
                 return (
@@ -326,16 +336,16 @@ function ShortCard({ data, short }: { data: ProjectData; short: ShortRow }) {
                     key={l}
                     role="radio"
                     aria-checked={short.layout === l}
-                    aria-label={l === "stacked" ? "Stacked layout" : "Full-screen layout"}
+                    aria-label={l === "stacked" ? t("media.shorts.stackedLabel") : t("media.shorts.fullscreenLabel")}
                     disabled={disabled}
-                    title={disabled ? "Draw the vertical images first" : undefined}
+                    title={disabled ? t("media.shorts.drawVerticalFirst") : undefined}
                     onClick={() => short.layout !== l && update({ layout: l })}
                     className={cn(
                       "h-8 rounded-md px-3 text-sm font-medium disabled:cursor-not-allowed disabled:opacity-50",
                       short.layout === l ? "bg-white text-stone-900 shadow-sm" : "text-stone-600 hover:text-stone-900",
                     )}
                   >
-                    {l === "stacked" ? "Stacked (free)" : "Full-screen"}
+                    {l === "stacked" ? t("media.shorts.stacked") : t("media.shorts.fullscreen")}
                   </button>
                 );
               })}
@@ -347,9 +357,9 @@ function ShortCard({ data, short }: { data: ProjectData; short: ShortRow }) {
                 disabled={running}
                 onClick={() => act.mutate({ action: "verticalImages", shortId: short.id, quality: "low" })}
                 icon={<ImagePlus className="size-3.5" />}
-                title="Draft quality. The long video's images are not changed."
+                title={t("media.shorts.draftTitle")}
               >
-                Draw {missingVertical} vertical image{missingVertical === 1 ? "" : "s"} (≈ ${(missingVertical * 0.02).toFixed(2)})
+                {t(missingVertical === 1 ? "media.shorts.drawVerticalOne" : "media.shorts.drawVerticalMany", { count: missingVertical, cost: (missingVertical * 0.02).toFixed(2) })}
               </Button>
             ) : null}
           </div>
@@ -357,12 +367,12 @@ function ShortCard({ data, short }: { data: ProjectData; short: ShortRow }) {
 
         <div className="grid gap-2 sm:grid-cols-[1fr_auto]">
           <div>
-            <Label hint={<CopyButton text={`${caption}\n\n${hashtags}`.trim()} label="Copy caption + tags" />}>Post caption</Label>
+            <Label hint={<CopyButton text={`${caption}\n\n${hashtags}`.trim()} label={t("media.shorts.copyCaption")} />}>{t("media.shorts.postCaption")}</Label>
             <Textarea rows={2} className="text-[13px]" value={caption} onChange={(e) => setCaption(e.target.value)} onBlur={() => caption !== (short.caption ?? "") && update({ caption })} />
             <Input
               className="mt-2 h-9 text-[13px]"
               value={hashtags}
-              placeholder="#hashtags"
+              placeholder={t("media.shorts.hashtags")}
               onChange={(e) => setHashtags(e.target.value)}
               onBlur={() => hashtags !== (short.hashtags ?? "") && update({ hashtags })}
             />
@@ -376,21 +386,21 @@ function ShortCard({ data, short }: { data: ProjectData; short: ShortRow }) {
             onClick={() => act.mutate({ action: "renderShort", shortId: short.id })}
             icon={<Clapperboard className="size-4" />}
           >
-            {short.renderUrl ? "Re-render" : "Render Short"}
+            {short.renderUrl ? t("media.shorts.reRender") : t("media.shorts.renderShort")}
           </Button>
           {short.renderUrl && !running ? (
             <a href={`${short.renderUrl}?download=1`}>
               <Button icon={<Download className="size-4" />}>MP4 (1080×1920)</Button>
             </a>
           ) : null}
-          <span className="text-xs text-stone-500">Upload to YouTube Shorts, TikTok, Instagram and Facebook Reels</span>
+          <span className="text-xs text-stone-500">{t("media.shorts.uploadTo")}</span>
         </div>
         <JobBar job={job} />
         <ErrorNote error={act.error} />
         {(data.shortRenders[short.id] ?? []).some((r) => !r.current) ? (
           <details className="rounded-lg bg-stone-50 px-3 py-2 ring-1 ring-stone-200">
             <summary className="cursor-pointer text-[13px] font-medium text-stone-700">
-              Earlier renders ({(data.shortRenders[short.id] ?? []).filter((r) => !r.current).length})
+              {t("media.shorts.earlierRenders", { count: (data.shortRenders[short.id] ?? []).filter((r) => !r.current).length })}
             </summary>
             <div className="mt-1">
               <RenderHistory projectId={projectId} renders={data.shortRenders[short.id] ?? []} vertical hideCurrent />

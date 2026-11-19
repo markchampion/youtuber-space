@@ -5,7 +5,7 @@ import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { env, sampleRateFromFormat } from "@/lib/env";
 import { DEFAULT_VOICE_SETTINGS, pacingOf, type VoiceOverride } from "@/lib/channel";
-import { synthesizeParagraph } from "@/lib/tts/elevenlabs";
+import { ttsProvider } from "@/lib/tts/provider";
 import { pcmToWav, stitchPcm, wavPcm } from "@/lib/tts/wav";
 import { absPath, projectRel, warmPreview, writeMedia } from "@/lib/media";
 import { paragraphOffsets, wordCount } from "@/lib/sync";
@@ -13,27 +13,59 @@ import { normalizeProfile } from "@/lib/channel-normalize";
 import { startJob } from "@/lib/jobs/queue";
 import { getChannel, getProject, markChanged, paragraphsOf, sentencesOf, updateProject } from "./common";
 
+/**
+ * Channels and per-video overrides keep one voice per provider (ElevenLabs `voiceId`, local `localVoiceId`),
+ * so switching Settings → Voice connection back and forth never loses a pick.
+ */
+export function activeVoiceId(c: { voiceId: string | null; localVoiceId: string | null }) {
+  return env.ttsBackend === "local" ? c.localVoiceId : c.voiceId;
+}
+
+export function overrideVoiceId(o: VoiceOverride | null | undefined) {
+  return (env.ttsBackend === "local" ? o?.localVoiceId : o?.voiceId) ?? null;
+}
+
+/** The field a picked voice is saved to, for the active provider. */
+export function voiceField(): "voiceId" | "localVoiceId" {
+  return env.ttsBackend === "local" ? "localVoiceId" : "voiceId";
+}
+
 /** The voice a project is read with: its own override if it has one, else the channel's. */
 export function voiceConfig(projectId: string) {
   const p = getProject(projectId);
   const c = getChannel(p.channelId);
   const o = p.voiceOverride;
-  const voiceId = o?.voiceId ?? c.voiceId ?? (env.dryRun ? "dry-run-voice" : null);
-  if (!voiceId) throw new Error("Pick a voice first (Voice step → voice picker).");
+  const voiceId = overrideVoiceId(o) ?? activeVoiceId(c) ?? (env.dryRun ? "dry-run-voice" : null);
+  if (!voiceId) throw new Error(env.ttsBackend === "local" ? "Pick a local voice first (Voice step → voice picker)." : "Pick a voice first (Voice step → voice picker).");
   return {
+    backend: env.ttsBackend,
     voiceId,
     settings: o?.settings ?? c.voiceSettings ?? DEFAULT_VOICE_SETTINGS,
     locale: c.profile.language ?? "en",
     pronunciations: c.pronunciations ?? {},
-    format: env.elevenLabsOutputFormat,
+    format: env.voiceFormat,
   };
 }
 
-function hashFor(text: string, cfg: ReturnType<typeof voiceConfig>) {
+export function hashFor(text: string, cfg: ReturnType<typeof voiceConfig>) {
+  // Local TTS ignores the ElevenLabs sliders, so they stay out of its fingerprint (moving them re-voices nothing).
+  const settings = cfg.backend === "local" ? null : cfg.settings;
   return crypto
     .createHash("sha1")
-    // Language only joins the fingerprint when it isn't English, so existing English voices stay valid.
-    .update(JSON.stringify([text, cfg.voiceId, cfg.settings, cfg.pronunciations, cfg.format, env.dryRun, ...(cfg.locale !== "en" ? [cfg.locale] : [])]))
+    // Language and provider only join the fingerprint when they aren't the defaults, so existing English
+    // ElevenLabs takes stay valid.
+    .update(
+      JSON.stringify([
+        text,
+        cfg.voiceId,
+        settings,
+        cfg.pronunciations,
+        cfg.format,
+        env.dryRun,
+        ...(cfg.locale !== "en" ? [cfg.locale] : []),
+        ...(cfg.backend === "local" ? ["local"] : []),
+      ]),
+    )
     .digest("hex")
     .slice(0, 16);
 }
@@ -73,7 +105,7 @@ export function startVoiceJob(projectId: string, onlyParagraphIds?: string[]) {
       ctx.progress(n / (todo.length + 1), `Voicing paragraph ${para.idx + 1} (${n + 1}/${todo.length})${reused ? `, ${reused} reused` : ""}`);
       db.update(schema.paragraphs).set({ status: "generating", error: null }).where(eq(schema.paragraphs.id, para.id)).run();
       try {
-        const res = await synthesizeParagraph({
+        const res = await ttsProvider().synthesizeParagraph({
           text: para.text,
           voiceId: cfg.voiceId,
           settings: cfg.settings,
@@ -132,7 +164,7 @@ export function stitch(projectId: string) {
   const p = getProject(projectId);
   const paras = paragraphsOf(projectId);
   if (!paras.length || paras.some((x) => x.status !== "done" || !x.audioPath || !x.sampleCount)) return false;
-  const rate = paras[0].sampleRate ?? sampleRateFromFormat(env.elevenLabsOutputFormat);
+  const rate = paras[0].sampleRate ?? sampleRateFromFormat(env.voiceFormat);
   if (paras.some((x) => x.sampleRate !== rate)) throw new Error("Paragraphs have mixed sample rates; regenerate all");
 
   const chunks = paras.map((x) => wavPcm(fs.readFileSync(absPath(x.audioPath!))));
@@ -162,7 +194,7 @@ export function stitch(projectId: string) {
   const duration = pcm.length / 2 / rate;
   updateProject(projectId, { audioPath: rel, audioDuration: duration });
   // A one-off voice for this video says nothing about the channel's usual speed.
-  if (!p.voiceOverride?.voiceId && !p.voiceOverride?.settings) {
+  if (!overrideVoiceId(p.voiceOverride) && !p.voiceOverride?.settings) {
     recordSpeakingSpeed(p.channelId, paras.map((x) => x.text).join(" "), duration - (paras.length - 1) * (p.pauseMs / 1000));
   }
   markChanged(projectId, "voice");
@@ -183,9 +215,21 @@ function recordSpeakingSpeed(channelId: string, text: string, speechSeconds: num
   db.update(schema.channels).set({ profile }).where(eq(schema.channels.id, channelId)).run();
 }
 
-/** Use a different voice or tone for this video only. null = back to the channel's voice. */
+/**
+ * Use a different voice or tone for this video only. null = back to the channel's voice.
+ * The browser always sends `voiceId`; it is stored under the active provider's field, and the other
+ * provider's override is kept.
+ */
 export function setVoiceOverride(projectId: string, override: VoiceOverride | null) {
-  const clean = override && (override.voiceId || override.settings) ? { voiceId: override.voiceId ?? null, settings: override.settings ?? null } : null;
+  if (!override) return updateProject(projectId, { voiceOverride: null });
+  const prev = getProject(projectId).voiceOverride;
+  const next: VoiceOverride = {
+    voiceId: prev?.voiceId ?? null,
+    localVoiceId: prev?.localVoiceId ?? null,
+    [voiceField()]: override.voiceId ?? null,
+    settings: override.settings ?? null,
+  };
+  const clean = next.voiceId || next.localVoiceId || next.settings ? next : null;
   updateProject(projectId, { voiceOverride: clean });
 }
 
@@ -195,11 +239,12 @@ export function makeVoiceChannelDefault(projectId: string) {
   const o = p.voiceOverride;
   if (!o) return;
   const c = getChannel(p.channelId);
-  const voiceChanged = (o.voiceId && o.voiceId !== c.voiceId) || (o.settings && o.settings.speed !== c.voiceSettings?.speed);
+  const picked = overrideVoiceId(o);
+  const voiceChanged = (picked && picked !== activeVoiceId(c)) || (o.settings && o.settings.speed !== c.voiceSettings?.speed);
   // A new voice or speed makes the measured speaking speed meaningless (same rule as the channel API).
   const profile = voiceChanged ? normalizeProfile({ ...c.profile, pacing: { ...pacingOf(c.profile), measuredWpm: undefined } }) : c.profile;
   db.update(schema.channels)
-    .set({ voiceId: o.voiceId ?? c.voiceId, voiceSettings: o.settings ?? c.voiceSettings, profile })
+    .set({ voiceId: o.voiceId ?? c.voiceId, localVoiceId: o.localVoiceId ?? c.localVoiceId, voiceSettings: o.settings ?? c.voiceSettings, profile })
     .where(eq(schema.channels.id, c.id))
     .run();
   updateProject(projectId, { voiceOverride: null });

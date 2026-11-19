@@ -11,6 +11,7 @@ import { BrandingCard } from "@/components/branding-card";
 import { ChannelArtCard } from "@/components/channel-art-card";
 import { useChannels } from "@/components/channel-switcher";
 import { Button, Card, ErrorNote, Spinner, cn } from "@/components/ui";
+import { useT } from "@/lib/i18n";
 
 export default function ChannelPage() {
   const { data } = useChannel();
@@ -20,6 +21,7 @@ export default function ChannelPage() {
 }
 
 function ChannelEditor({ channelId, saved }: { channelId: string; saved: ChannelProfile }) {
+  const t = useT();
   const qc = useQueryClient();
   const [profile, setProfile] = useState<ChannelProfile>(saved);
   const [prevSaved, setPrevSaved] = useState(saved);
@@ -42,16 +44,16 @@ function ChannelEditor({ channelId, saved }: { channelId: string; saved: Channel
     <main className="mx-auto w-full max-w-4xl px-4 py-8 sm:px-6">
       <div className="mb-6 flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
-          <div className="text-xs font-medium uppercase tracking-wide text-stone-500">Channel profile</div>
+          <div className="text-xs font-medium uppercase tracking-wide text-stone-500">{t("channel.page.profileLabel")}</div>
           <h1 className="mt-0.5 truncate text-2xl font-semibold tracking-tight">{saved.name}</h1>
           <p className="mt-1 max-w-2xl text-sm text-stone-600">
-            Every prompt is built from this profile. Most changes only need the essentials, or a one-line &ldquo;Rewrite with AI&rdquo;.
+            {t("channel.page.intro")}
           </p>
         </div>
         <div className="flex gap-2">
           <DeleteChannel channelId={channelId} />
           <Link href="/channel/new">
-            <Button icon={<Plus className="size-4" />}>New channel</Button>
+            <Button icon={<Plus className="size-4" />}>{t("channel.page.newChannel")}</Button>
           </Link>
         </div>
       </div>
@@ -65,13 +67,13 @@ function ChannelEditor({ channelId, saved }: { channelId: string; saved: Channel
 
       <div className={cn("sticky bottom-0 mt-6 flex items-center gap-3 border-t border-stone-200 bg-background/95 py-3 backdrop-blur", !dirty && !save.error && "hidden")}>
         <div className="min-w-0 flex-1">
-          {save.error ? <ErrorNote error={save.error} /> : <span className="text-sm font-medium text-amber-800">Unsaved changes</span>}
+          {save.error ? <ErrorNote error={save.error} /> : <span className="text-sm font-medium text-amber-800">{t("channel.page.unsaved")}</span>}
         </div>
         <Button variant="ghost" disabled={!dirty} onClick={() => setProfile(saved)}>
-          Discard
+          {t("channel.page.discard")}
         </Button>
         <Button variant="primary" disabled={!dirty} loading={save.isPending} onClick={() => save.mutate(profile)}>
-          Save profile
+          {t("channel.page.saveProfile")}
         </Button>
       </div>
     </main>
@@ -79,6 +81,7 @@ function ChannelEditor({ channelId, saved }: { channelId: string; saved: Channel
 }
 
 function DeleteChannel({ channelId }: { channelId: string }) {
+  const t = useT();
   const qc = useQueryClient();
   const { data } = useChannels();
   const me = data?.channels.find((c) => c.id === channelId);
@@ -94,12 +97,12 @@ function DeleteChannel({ channelId }: { channelId: string }) {
         variant="ghost"
         className="text-stone-500 hover:text-red-700"
         disabled={blocked}
-        title={blocked ? "Delete this channel's videos first" : "Delete this channel and its ideas"}
+        title={blocked ? t("channel.page.deleteBlocked") : t("channel.page.deleteTitle")}
         loading={del.isPending}
-        onClick={() => confirm(`Delete "${me?.name}" and its ideas? This can't be undone.`) && del.mutate()}
+        onClick={() => confirm(t("channel.page.deleteConfirm", { name: me?.name ?? "" })) && del.mutate()}
         icon={<Trash2 className="size-4" />}
       >
-        Delete
+        {t("common.delete")}
       </Button>
       <ErrorNote error={del.error} />
     </div>
@@ -107,6 +110,7 @@ function DeleteChannel({ channelId }: { channelId: string }) {
 }
 
 function CharacterSection() {
+  const t = useT();
   const { data } = useChannel();
   const qc = useQueryClient();
   const gen = useMutation({
@@ -133,17 +137,17 @@ function CharacterSection() {
     <Card id="character" className="scroll-mt-20 p-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h2 className="font-semibold">Character reference</h2>
+          <h2 className="font-semibold">{t("channel.character.title")}</h2>
           <p className="mt-0.5 max-w-xl text-sm text-stone-600">
-            Upload your own character art, or generate a few character sheets and pick the best one. It&apos;s sent as a reference with every scene image, which keeps the character looking the same from frame to frame.
+            {t("channel.character.help")}
           </p>
         </div>
         <div className="flex flex-wrap gap-2">
           <Button icon={<ImageUp className="size-4" />} loading={upload.isPending} onClick={() => fileRef.current?.click()}>
-            Upload my own
+            {t("channel.character.upload")}
           </Button>
           <Button variant="primary" icon={<Sparkles className="size-4" />} loading={gen.isPending} onClick={() => gen.mutate()}>
-            Generate 2 options
+            {t("channel.character.generate")}
           </Button>
           <input
             ref={fileRef}
@@ -161,7 +165,7 @@ function CharacterSection() {
       <ErrorNote error={gen.error ?? upload.error ?? pick.error} />
       {!data.candidates.length ? (
         <div className="flex items-center gap-3 rounded-lg bg-stone-50 p-4 text-sm text-stone-600">
-          <UserRound className="size-5 text-stone-400" /> No character sheets yet.
+          <UserRound className="size-5 text-stone-400" /> {t("channel.character.none")}
         </div>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -174,10 +178,10 @@ function CharacterSection() {
                 className={cn("relative overflow-hidden rounded-lg ring-1 ring-stone-200 transition-shadow hover:shadow-md", active && "ring-4 ring-emerald-500")}
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={c.url} alt="Character sheet option" className="aspect-video w-full bg-stone-50 object-contain" />
+                <img src={c.url} alt={t("channel.character.alt")} className="aspect-video w-full bg-stone-50 object-contain" />
                 {active ? (
                   <span className="absolute right-2 top-2 flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-xs font-medium text-white">
-                    <Check className="size-3" /> In use
+                    <Check className="size-3" /> {t("channel.inUse")}
                   </span>
                 ) : null}
               </button>

@@ -6,16 +6,13 @@ import { ImageUp, Stamp, Trash2 } from "lucide-react";
 import { api, useChannel } from "@/lib/client";
 import { textColors, type Branding, type WatermarkPosition } from "@/lib/channel";
 import { Button, Card, ErrorNote, Input, Label, cn, useSyncedState } from "./ui";
+import { useT } from "@/lib/i18n";
 
-const CORNERS: { key: WatermarkPosition; label: string }[] = [
-  { key: "top-left", label: "Top left" },
-  { key: "top-right", label: "Top right" },
-  { key: "bottom-left", label: "Bottom left" },
-  { key: "bottom-right", label: "Bottom right" },
-];
+const CORNERS: WatermarkPosition[] = ["top-left", "top-right", "bottom-left", "bottom-right"];
 
 /** Channel watermark: handle and/or logo, drawn by the renderer on long videos and Shorts. */
 export function BrandingCard() {
+  const t = useT();
   const { data } = useChannel();
   const qc = useQueryClient();
   const fileRef = useRef<HTMLInputElement>(null);
@@ -63,16 +60,16 @@ export function BrandingCard() {
       <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 font-semibold">
-            <Stamp className="size-4 text-stone-500" /> Branding
+            <Stamp className="size-4 text-stone-500" /> {t("channel.branding.title")}
           </h2>
           <p className="mt-0.5 max-w-xl text-[13px] text-stone-600">
-            A small watermark with your handle and/or logo, added to every render. It matters most on Shorts, TikTok and Reels, where clips get re-uploaded without credit.
+            {t("channel.branding.help")}
           </p>
         </div>
         <button
           role="switch"
           aria-checked={b.enabled}
-          aria-label="Watermark"
+          aria-label={t("channel.branding.watermarkAria")}
           onClick={() => save.mutate({ enabled: !b.enabled })}
           className={cn("relative mt-1 h-6 w-11 shrink-0 rounded-full transition-colors", b.enabled ? "bg-brand" : "bg-stone-300")}
         >
@@ -83,11 +80,11 @@ export function BrandingCard() {
       <div className={cn("grid gap-6 md:grid-cols-[1fr_auto]", !b.enabled && "opacity-50")}>
         <div className="space-y-4">
           <div>
-            <Label hint="max 40 characters">Handle</Label>
+            <Label hint={t("channel.branding.handleHint")}>{t("channel.branding.handle")}</Label>
             <Input
               value={text}
               maxLength={40}
-              placeholder="@yourchannel"
+              placeholder={t("channel.branding.handlePlaceholder")}
               disabled={!b.enabled}
               onChange={(e) => setText(e.target.value)}
               onBlur={() => text !== b.text && save.mutate({ text })}
@@ -95,18 +92,18 @@ export function BrandingCard() {
           </div>
 
           <div>
-            <Label hint="transparent PNG works best">Logo</Label>
+            <Label hint={t("channel.branding.logoHint")}>{t("channel.branding.logo")}</Label>
             <div className="flex items-center gap-2">
               {data.logoUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={data.logoUrl} alt="Logo" className="h-10 w-auto rounded bg-[repeating-conic-gradient(#e7e5e4_0_25%,#fff_0_50%)] bg-[length:12px_12px] p-1 ring-1 ring-stone-200" />
+                <img src={data.logoUrl} alt={t("channel.branding.logo")} className="h-10 w-auto rounded bg-[repeating-conic-gradient(#e7e5e4_0_25%,#fff_0_50%)] bg-[length:12px_12px] p-1 ring-1 ring-stone-200" />
               ) : null}
               <Button size="sm" disabled={!b.enabled} loading={upload.isPending} onClick={() => fileRef.current?.click()} icon={<ImageUp className="size-3.5" />}>
-                {data.logoUrl ? "Replace" : "Upload logo"}
+                {data.logoUrl ? t("channel.branding.replace") : t("channel.branding.uploadLogo")}
               </Button>
               {data.logoUrl ? (
                 <Button size="sm" variant="ghost" disabled={!b.enabled} loading={removeLogo.isPending} onClick={() => removeLogo.mutate()} icon={<Trash2 className="size-3.5" />}>
-                  Remove
+                  {t("common.remove")}
                 </Button>
               ) : null}
               <input
@@ -124,28 +121,28 @@ export function BrandingCard() {
           </div>
 
           <div>
-            <Label hint="Shorts always use a safe top-left spot">Corner on the long video</Label>
-            <div role="radiogroup" aria-label="Watermark corner" className="inline-grid grid-cols-2 gap-1 rounded-lg bg-stone-200/70 p-1">
+            <Label hint={t("channel.branding.cornerHint")}>{t("channel.branding.corner")}</Label>
+            <div role="radiogroup" aria-label={t("channel.branding.cornerAria")} className="inline-grid grid-cols-2 gap-1 rounded-lg bg-stone-200/70 p-1">
               {CORNERS.map((c) => (
                 <button
-                  key={c.key}
+                  key={c}
                   role="radio"
-                  aria-checked={b.position === c.key}
+                  aria-checked={b.position === c}
                   disabled={!b.enabled}
-                  onClick={() => save.mutate({ position: c.key })}
+                  onClick={() => save.mutate({ position: c })}
                   className={cn(
                     "h-8 rounded-md px-3 text-[13px] font-medium",
-                    b.position === c.key ? "bg-white text-stone-900 shadow-sm" : "text-stone-600 hover:text-stone-900",
+                    b.position === c ? "bg-white text-stone-900 shadow-sm" : "text-stone-600 hover:text-stone-900",
                   )}
                 >
-                  {c.label}
+                  {t(`channel.branding.corners.${c}`)}
                 </button>
               ))}
             </div>
           </div>
 
           <div>
-            <Label hint={`${Math.round(op * 100)}%`}>Opacity</Label>
+            <Label hint={`${Math.round(op * 100)}%`}>{t("channel.branding.opacity")}</Label>
             <input
               type="range"
               min={0.3}
@@ -153,7 +150,7 @@ export function BrandingCard() {
               step={0.05}
               value={op}
               disabled={!b.enabled}
-              aria-label="Watermark opacity"
+              aria-label={t("channel.branding.opacityAria")}
               onChange={(e) => setOpacity(Number(e.target.value))}
               onPointerUp={() => save.mutate({ opacity: op }, { onSuccess: () => setOpacity(null) })}
               onKeyUp={() => save.mutate({ opacity: op }, { onSuccess: () => setOpacity(null) })}
@@ -164,15 +161,15 @@ export function BrandingCard() {
           <div className="flex flex-wrap gap-4 text-sm">
             <label className="flex items-center gap-2">
               <input type="checkbox" className="size-4 accent-orange-500" disabled={!b.enabled} checked={b.onLongVideo} onChange={(e) => save.mutate({ onLongVideo: e.target.checked })} />
-              Long video
+              {t("channel.branding.longVideo")}
             </label>
             <label className="flex items-center gap-2">
               <input type="checkbox" className="size-4 accent-orange-500" disabled={!b.enabled} checked={b.onShorts} onChange={(e) => save.mutate({ onShorts: e.target.checked })} />
-              Shorts
+              {t("channel.branding.shorts")}
             </label>
           </div>
           <p className="text-xs text-stone-500">
-            On YouTube you can also add a clickable subscribe watermark in YouTube Studio → Customization → Branding. Changing this marks this channel&apos;s videos for a re-render.
+            {t("channel.branding.youtubeNote")}
           </p>
           <ErrorNote error={save.error ?? upload.error ?? removeLogo.error} />
         </div>
@@ -180,18 +177,18 @@ export function BrandingCard() {
         {/* Live mini previews */}
         <div className="flex items-start gap-4" aria-hidden>
           <div>
-            <div className="mb-1 text-center text-[11px] text-stone-500">Long video</div>
+            <div className="mb-1 text-center text-[11px] text-stone-500">{t("channel.branding.longVideo")}</div>
             <div className="relative h-[101px] w-[180px] overflow-hidden rounded-md ring-1 ring-stone-300" style={{ background: "#7FB5D5" }}>
               <div className="absolute inset-x-0 bottom-0 h-8" style={{ background: "#D2B488" }} />
               {b.onLongVideo ? <div className={corner(b.position)}>{mark("sm")}</div> : null}
             </div>
           </div>
           <div>
-            <div className="mb-1 text-center text-[11px] text-stone-500">Short</div>
+            <div className="mb-1 text-center text-[11px] text-stone-500">{t("channel.branding.short")}</div>
             <div className="relative h-[142px] w-[80px] overflow-hidden rounded-md ring-1 ring-stone-300" style={{ background: colors.paper }}>
               <div className="absolute inset-x-0 top-[47px] h-[45px]" style={{ background: "#7FB5D5" }} />
               <div className="absolute inset-x-1 top-[18px] text-center text-[6px] font-bold" style={{ color: colors.text }}>
-                HOOK TITLE
+                {t("channel.branding.hookTitle")}
               </div>
               {b.onShorts ? <div className="absolute left-1.5 top-1">{mark("xs")}</div> : null}
             </div>

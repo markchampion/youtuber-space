@@ -6,6 +6,7 @@ import { DEFAULT_BRANDING, pacingOf } from "@/lib/channel";
 import { saveBranding } from "@/lib/pipeline/channels";
 import { keyStatus } from "@/lib/env";
 import { getChannel } from "@/lib/pipeline/common";
+import { activeVoiceId, voiceField } from "@/lib/pipeline/voice";
 import { characterCandidates, setCharacterRef } from "@/lib/pipeline/images";
 import { mediaUrl } from "@/lib/media";
 import { channelArt } from "@/lib/pipeline/channel-art";
@@ -15,7 +16,8 @@ export const dynamic = "force-dynamic";
 export const GET = handler(async () => {
   const c = getChannel();
   return Response.json({
-    channel: c,
+    // `voiceId` is the voice of the active provider (Settings → Voice connection).
+    channel: { ...c, voiceId: activeVoiceId(c) },
     characterRefUrl: mediaUrl(c.characterRefPath),
     branding: { ...DEFAULT_BRANDING, ...(c.branding ?? {}) },
     logoUrl: mediaUrl(c.branding?.logoPath),
@@ -33,10 +35,10 @@ export const PUT = handler(async (req: Request) => {
     values.profile = normalizeProfile(body.profile);
     values.name = values.profile.name;
   }
-  if ("voiceId" in body) values.voiceId = body.voiceId;
+  if ("voiceId" in body) values[voiceField()] = body.voiceId;
   if (body.voiceSettings) values.voiceSettings = body.voiceSettings;
   // A different voice or speed speaks at a different pace: forget the old measurement.
-  const voiceChanged = "voiceId" in body && body.voiceId !== c.voiceId;
+  const voiceChanged = "voiceId" in body && body.voiceId !== activeVoiceId(c);
   const speedChanged = body.voiceSettings && body.voiceSettings.speed !== (c.voiceSettings?.speed ?? 1);
   if (voiceChanged || speedChanged) {
     const base = values.profile ?? c.profile;

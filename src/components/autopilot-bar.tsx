@@ -5,6 +5,7 @@ import { Pause, Play, RotateCcw, Square, Zap } from "lucide-react";
 import { AUTO_STEPS, AUTO_STEP_LABELS, autopilotOf, type AutoStep, type AutopilotConfig } from "@/lib/channel";
 import { runningJob, useProjectAction, type ProjectData } from "@/lib/client";
 import { STEPS } from "@/lib/types";
+import { autoStepLabel, useT, type T } from "@/lib/i18n";
 import { JobBar } from "./step";
 import { Button, ErrorNote, cn } from "./ui";
 
@@ -14,19 +15,22 @@ function stepHref(projectId: string, step: AutoStep) {
   return `/projects/${projectId}/${STEPS.find((s) => s.key === key)?.path ?? "script"}`;
 }
 
-function summary(cfg: AutopilotConfig, from: AutoStep = "outline", ad = false, silent = false) {
+function summary(t: T, cfg: AutopilotConfig, from: AutoStep = "outline", ad = false, silent = false) {
   // Ads are written from the product brief: no outline step. Silent ads have no voice step.
   const run = AUTO_STEPS.slice(AUTO_STEPS.indexOf(from), AUTO_STEPS.indexOf(cfg.stopAfter) + 1).filter(
     (s) => !(ad && s === "outline") && !(silent && s === "voice"),
   );
   const pauses = cfg.pauseAfter.filter((s) => run.includes(s) && s !== cfg.stopAfter);
-  return { steps: run.map((s) => AUTO_STEP_LABELS[s]).join(" → "), pauses: pauses.map((s) => AUTO_STEP_LABELS[s]).join(", ") };
+  const label = (s: AutoStep) => autoStepLabel(t, s, AUTO_STEP_LABELS[s]);
+  return { steps: run.map(label).join(" → "), pauses: pauses.map(label).join(", ") };
 }
 
 const CHILD_JOBS = ["voice", "scenes", "images", "render"];
 
 /** Run / pause / continue strip shown on every step of a video. */
 export function AutopilotBar({ data }: { data: ProjectData }) {
+  const t = useT();
+  const stepName = (s: AutoStep) => autoStepLabel(t, s, AUTO_STEP_LABELS[s]);
   const act = useProjectAction(data.project.id);
   const a = data.project.autopilot;
   const job = runningJob(data, "autopilot");
@@ -62,8 +66,8 @@ export function AutopilotBar({ data }: { data: ProjectData }) {
       "running",
       <>
         <Zap className="size-4 shrink-0 text-orange-600" />
-        <span className="font-medium">Autopilot{a ? `: ${AUTO_STEP_LABELS[a.step]}` : ""}</span>
-        <span className="text-stone-600">{stopping ? "will stop after this step" : `${summary(a?.config ?? cfg, a?.from, ad, silent).steps}`}</span>
+        <span className="font-medium">{a ? t("nav.autopilot.runningAt", { step: stepName(a.step) }) : t("nav.autopilot.name")}</span>
+        <span className="text-stone-600">{stopping ? t("nav.autopilot.willStop") : summary(t, a?.config ?? cfg, a?.from, ad, silent).steps}</span>
         <Button
           size="sm"
           variant="ghost"
@@ -72,9 +76,9 @@ export function AutopilotBar({ data }: { data: ProjectData }) {
           loading={pending && act.variables?.action === "autopilotStop"}
           icon={<Square className="size-3.5" />}
           onClick={() => act.mutate({ action: "autopilotStop" })}
-          title="Stops after the current step. A step that's already running finishes first."
+          title={t("nav.autopilot.stopTitle")}
         >
-          Stop after this step
+          {t("nav.autopilot.stopAfter")}
         </Button>
         <div className="w-full space-y-2">
           <JobBar job={job} />
@@ -91,15 +95,15 @@ export function AutopilotBar({ data }: { data: ProjectData }) {
       <>
         <Pause className="size-4 shrink-0 text-amber-700" />
         <span className="font-medium text-amber-900">
-          {a.pausedReason ? `Autopilot paused at ${AUTO_STEP_LABELS[a.step]}` : `Autopilot paused after ${AUTO_STEP_LABELS[a.step]} for your review`}
+          {a.pausedReason ? t("nav.autopilot.pausedAt", { step: stepName(a.step) }) : t("nav.autopilot.pausedForReview", { step: stepName(a.step) })}
         </span>
-        <span className="text-amber-900/80">{a.pausedReason ?? "Edit anything you like; Continue approves it as it is now."}</span>
+        <span className="text-amber-900/80">{a.pausedReason ?? t("nav.autopilot.editHint")}</span>
         <Link href={stepHref(data.project.id, a.step)} className="text-amber-900 underline underline-offset-2">
-          Open {AUTO_STEP_LABELS[a.step]}
+          {t("nav.autopilot.open", { step: stepName(a.step) })}
         </Link>
         <div className="ml-auto flex gap-1">
           <Button size="sm" variant="ghost" onClick={() => act.mutate({ action: "autopilotStop" })} disabled={pending}>
-            Stop
+            {t("nav.autopilot.stop")}
           </Button>
           <Button
             size="sm"
@@ -108,7 +112,7 @@ export function AutopilotBar({ data }: { data: ProjectData }) {
             loading={pending && act.variables?.action === "autopilotContinue"}
             onClick={() => act.mutate({ action: "autopilotContinue" })}
           >
-            Continue autopilot
+            {t("nav.autopilot.continue")}
           </Button>
         </div>
       </>,
@@ -122,13 +126,13 @@ export function AutopilotBar({ data }: { data: ProjectData }) {
       <>
         <RotateCcw className="size-4 shrink-0 text-red-700" />
         <span className="font-medium text-red-900">
-          Autopilot {a.interrupted ? "was interrupted" : "failed"} at {AUTO_STEP_LABELS[a.step]}
+          {t(a.interrupted ? "nav.autopilot.interruptedAt" : "nav.autopilot.failedAt", { step: stepName(a.step) })}
         </span>
         <span className="min-w-0 flex-1 truncate text-red-900/80" title={a.error}>
-          {a.interrupted ? "The server restarted while it was running." : a.error}
+          {a.interrupted ? t("nav.autopilot.serverRestarted") : a.error}
         </span>
         <Button size="sm" variant="ghost" onClick={() => act.mutate({ action: "autopilotStop" })} disabled={pending}>
-          Dismiss
+          {t("nav.autopilot.dismiss")}
         </Button>
         <Button
           size="sm"
@@ -137,26 +141,26 @@ export function AutopilotBar({ data }: { data: ProjectData }) {
           loading={pending && act.variables?.action === "autopilotContinue"}
           onClick={() => act.mutate({ action: "autopilotContinue" })}
         >
-          Retry from {AUTO_STEP_LABELS[a.step]}
+          {t("nav.autopilot.retryFrom", { step: stepName(a.step) })}
         </Button>
       </>,
     );
   }
 
   // Idle, done or stopped
-  const s = summary(cfg, undefined, ad, silent);
+  const s = summary(t, cfg, undefined, ad, silent);
   return box(
     "neutral",
     <>
       <Zap className="size-4 shrink-0 text-stone-500" />
       <span className="text-stone-700">
-        <span className="font-medium">Autopilot</span> runs {s.steps}
-        {s.pauses ? <span className="text-stone-500"> · pauses after {s.pauses}</span> : null}
-        {a?.status === "done" ? <span className="text-emerald-700"> · last run finished</span> : null}
-        {a?.status === "stopped" ? <span className="text-stone-500"> · last run stopped at {AUTO_STEP_LABELS[a.step]}</span> : null}
+        <span className="font-medium">{t("nav.autopilot.name")}</span> {t("nav.autopilot.runs", { steps: s.steps })}
+        {s.pauses ? <span className="text-stone-500"> · {t("nav.autopilot.pausesAfter", { steps: s.pauses })}</span> : null}
+        {a?.status === "done" ? <span className="text-emerald-700"> · {t("nav.autopilot.lastFinished")}</span> : null}
+        {a?.status === "stopped" ? <span className="text-stone-500"> · {t("nav.autopilot.lastStopped", { step: stepName(a.step) })}</span> : null}
       </span>
       <Link href="/channel#autopilot" className="text-xs text-stone-500 underline-offset-2 hover:underline">
-        change
+        {t("nav.autopilot.change")}
       </Link>
       <Button
         size="sm"
@@ -164,10 +168,10 @@ export function AutopilotBar({ data }: { data: ProjectData }) {
         className="ml-auto"
         icon={<Zap className="size-3.5" />}
         loading={pending && act.variables?.action === "autopilot"}
-        title="Steps that are already done are skipped"
+        title={t("nav.autopilot.runTitle")}
         onClick={() => act.mutate({ action: "autopilot" })}
       >
-        Run autopilot
+        {t("nav.autopilot.run")}
       </Button>
     </>,
   );

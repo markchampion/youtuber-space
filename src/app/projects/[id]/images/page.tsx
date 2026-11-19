@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -11,14 +11,21 @@ import { handFont } from "@/remotion/shared";
 import { outlineFor } from "@/lib/color";
 import { JobBar, StaleBanner, StepFooter, StepHeader } from "@/components/step";
 import { Badge, Button, Card, EmptyState, ErrorNote, Select, Spinner, Textarea, cn, fmtTime } from "@/components/ui";
+import { useT } from "@/lib/i18n";
 
 type Quality = "low" | "medium" | "high";
-const QUALITY_LABEL: Record<Quality, string> = { low: "Draft (low)", medium: "Final (medium)", high: "Final (high)" };
+const QUALITIES: Quality[] = ["low", "medium", "high"];
+
+/** Fills `{name}` slots of a translated sentence with React nodes (e.g. bold numbers). */
+function rich(text: string, parts: Record<string, ReactNode>): ReactNode {
+  return text.split(/\{(\w+)\}/).map((s, i) => (i % 2 ? <Fragment key={i}>{parts[s] ?? `{${s}}`}</Fragment> : s));
+}
 
 export default function ImagesPage() {
   const { id } = useParams<{ id: string }>();
   const { data } = useProject(id);
   const act = useProjectAction(id);
+  const t = useT();
   const [quality, setQuality] = useState<Quality>("low");
   const [focus, setFocus] = useState(0);
   const gridRef = useRef<HTMLDivElement>(null);
@@ -27,8 +34,8 @@ export default function ImagesPage() {
   // Keyboard review: ←/→ move, A approve, R regenerate.
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
-      const t = e.target as HTMLElement;
-      if (t.closest("input, textarea, select, [contenteditable]")) return;
+      const el = e.target as HTMLElement;
+      if (el.closest("input, textarea, select, [contenteditable]")) return;
       if (!scenes.length) return;
       if (e.key === "ArrowRight") setFocus((f) => Math.min(scenes.length - 1, f + 1));
       else if (e.key === "ArrowLeft") setFocus((f) => Math.max(0, f - 1));
@@ -60,38 +67,38 @@ export default function ImagesPage() {
   return (
     <div>
       <StepHeader
-        title="Images"
+        title={t("common.steps.images")}
         description={
           data.product
-            ? "Generate cheap drafts first, then regenerate the keepers at final quality. Your product photos are sent with every image so the product stays exactly the same."
-            : "Generate cheap drafts first, then regenerate the keepers at final quality. Your character reference is sent with every image so the character stays consistent."
+            ? t("media.images.descriptionProduct")
+            : t("media.images.descriptionCharacter")
         }
         actions={
           <span className="hidden items-center gap-1.5 text-xs text-stone-500 md:flex">
-            <Keyboard className="size-3.5" /> ←/→ move · A approve · R regenerate
+            <Keyboard className="size-3.5" /> {t("media.images.keyboard")}
           </span>
         }
       />
       <StaleBanner data={data} step="images">
-        Some scenes changed after images were approved. Changed scenes are un-approved; regenerate those.
+        {t("media.images.stale")}
       </StaleBanner>
 
       {!scenes.length ? (
-        <EmptyState icon={<ImageIcon className="size-8" />} title="Plan scenes first" />
+        <EmptyState icon={<ImageIcon className="size-8" />} title={t("media.images.planScenesFirst")} />
       ) : (
         <div className="space-y-4">
           <CharacterRefCard data={data} />
 
           <Card className="flex flex-wrap items-center gap-3 p-4">
             <div className="min-w-0 flex-1 text-sm">
-              <span className="font-medium">{imageScenes.length - missing}</span> of {imageScenes.length} images generated ·{" "}
-              <span className="font-medium">{approved}</span> of {scenes.length} scenes approved
-              <span className="text-stone-500"> · {scenes.length - imageScenes.length} text frames need no image</span>
+              {rich(t("media.images.generated", { total: imageScenes.length }), { done: <span className="font-medium">{imageScenes.length - missing}</span> })} ·{" "}
+              {rich(t("media.images.approvedCount", { total: scenes.length }), { approved: <span className="font-medium">{approved}</span> })}
+              <span className="text-stone-500"> · {t("media.images.textFrames", { count: scenes.length - imageScenes.length })}</span>
             </div>
-            <Select value={quality} onChange={(e) => setQuality(e.target.value as Quality)} className="w-44" aria-label="Quality">
-              {(Object.keys(QUALITY_LABEL) as Quality[]).map((q) => (
+            <Select value={quality} onChange={(e) => setQuality(e.target.value as Quality)} className="w-44" aria-label={t("media.images.qualityLabel")}>
+              {QUALITIES.map((q) => (
                 <option key={q} value={q}>
-                  {QUALITY_LABEL[q]}
+                  {t(`media.images.quality.${q}`)}
                 </option>
               ))}
             </Select>
@@ -103,7 +110,7 @@ export default function ImagesPage() {
                 onClick={() => act.mutate({ action: "images", quality, onlyMissing: true })}
                 title={`≈ $${(missing * est).toFixed(2)}`}
               >
-                Generate {missing} missing
+                {t("media.images.generateMissing", { count: missing })}
               </Button>
             ) : (
               <Button
@@ -114,9 +121,9 @@ export default function ImagesPage() {
                   if (ids.length) act.mutate({ action: "images", quality, sceneIds: ids });
                 }}
                 disabled={!imageScenes.some((s) => !s.approved)}
-                title="Regenerate every scene that isn't approved yet"
+                title={t("media.images.regenerateUnapprovedTitle")}
               >
-                Regenerate unapproved
+                {t("media.images.regenerateUnapproved")}
               </Button>
             )}
           </Card>
@@ -135,13 +142,14 @@ export default function ImagesPage() {
         data={data}
         step="images"
         canApprove={scenes.length > 0 && missing === 0 && !running}
-        hint={missing ? `${missing} scenes still need an image.` : "Approving marks all generated images as approved."}
+        hint={missing ? t("media.images.hintMissing", { count: missing }) : t("media.images.hintApprove")}
       />
     </div>
   );
 }
 
 function CharacterRefCard({ data }: { data: ProjectData }) {
+  const t = useT();
   if (data.product) {
     // Product ads: the uploaded photos are the reference, edited on the Brief & Script step.
     return (
@@ -149,16 +157,16 @@ function CharacterRefCard({ data }: { data: ProjectData }) {
         <div className="flex shrink-0 gap-1.5">
           {data.product.imageUrls.map((u, i) => (
             // eslint-disable-next-line @next/next/no-img-element
-            <img key={i} src={u ?? ""} alt={`Product photo ${i + 1}`} className="size-16 rounded-lg bg-stone-100 object-contain ring-1 ring-stone-200" />
+            <img key={i} src={u ?? ""} alt={t("media.images.productPhotoAlt", { n: i + 1 })} className="size-16 rounded-lg bg-stone-100 object-contain ring-1 ring-stone-200" />
           ))}
         </div>
         <div className="min-w-0 flex-1 text-sm">
-          <div className="font-medium">Product reference</div>
-          <div className="text-stone-600">Sent with every image so the AI keeps your exact product and only changes the scene around it.</div>
+          <div className="font-medium">{t("media.images.productReference")}</div>
+          <div className="text-stone-600">{t("media.images.productReferenceHelp")}</div>
         </div>
         <Link href={`/projects/${data.project.id}/script`}>
           <Button size="sm" variant="secondary">
-            Change photos
+            {t("media.images.changePhotos")}
           </Button>
         </Link>
       </Card>
@@ -169,22 +177,22 @@ function CharacterRefCard({ data }: { data: ProjectData }) {
       <div className="grid size-16 shrink-0 place-items-center overflow-hidden rounded-lg bg-stone-100 ring-1 ring-stone-200">
         {data.channel.characterRefUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={data.channel.characterRefUrl} alt="Character reference" className="size-full object-cover" />
+          <img src={data.channel.characterRefUrl} alt={t("media.images.characterReference")} className="size-full object-cover" />
         ) : (
           <UserRound className="size-6 text-stone-400" />
         )}
       </div>
       <div className="min-w-0 flex-1 text-sm">
-        <div className="font-medium">Character reference</div>
+        <div className="font-medium">{t("media.images.characterReference")}</div>
         <div className="text-stone-600">
           {data.channel.characterRefUrl
-            ? "Sent with every image to keep the character looking the same."
-            : "None set. Images will work, but the character may drift between frames."}
+            ? t("media.images.characterSet")
+            : t("media.images.characterNone")}
         </div>
       </div>
       <Link href="/channel#character">
         <Button size="sm" variant="secondary">
-          {data.channel.characterRefUrl ? "Change" : "Create one"}
+          {data.channel.characterRefUrl ? t("media.images.change") : t("media.images.createOne")}
         </Button>
       </Link>
     </Card>
@@ -208,6 +216,7 @@ function SceneCard({
 }) {
   const qc = useQueryClient();
   const act = useProjectAction(data.project.id);
+  const t = useT();
   const [editing, setEditing] = useState(false);
   const [desc, setDesc] = useState(scene.description);
   const [uploading, setUploading] = useState(false);
@@ -263,14 +272,14 @@ function SceneCard({
         {busy ? (
           <div className="absolute inset-0 grid place-items-center">
             <span className="flex items-center gap-2 rounded-full bg-white/90 px-3 py-1 text-xs font-medium shadow">
-              <Spinner className="size-3.5" /> {scene.imageStatus === "queued" ? "Queued" : "Drawing…"}
+              <Spinner className="size-3.5" /> {scene.imageStatus === "queued" ? t("media.images.queued") : t("media.images.drawing")}
             </span>
           </div>
         ) : null}
         <div className="absolute left-2 top-2 flex gap-1">
           <span className="rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-medium text-white">#{scene.idx + 1}</span>
           {scene.imageQuality && scene.needsImage ? (
-            <span className="rounded-full bg-black/60 px-2 py-0.5 text-[11px] text-white">{scene.imageQuality}</span>
+            <span className="rounded-full bg-black/60 px-2 py-0.5 text-[11px] text-white">{t.dyn(`media.images.qualityShort.${scene.imageQuality}`, scene.imageQuality)}</span>
           ) : null}
         </div>
         {scene.approved ? (
@@ -299,10 +308,10 @@ function SceneCard({
                   setEditing(false);
                 }}
               >
-                Save & regenerate
+                {t("media.images.saveRegenerate")}
               </Button>
               <Button size="sm" variant="ghost" onClick={() => setEditing(false)}>
-                Cancel
+                {t("common.cancel")}
               </Button>
             </div>
           </div>
@@ -315,7 +324,7 @@ function SceneCard({
               onClick={() => act.mutate({ action: "updateScene", sceneId: scene.id, values: { approved: !scene.approved } })}
               icon={<Check className="size-3.5" />}
             >
-              {scene.approved ? "Approved" : "Approve"}
+              {scene.approved ? t("media.images.approved") : t("media.images.approve")}
             </Button>
             {scene.needsImage ? (
               <>
@@ -325,12 +334,12 @@ function SceneCard({
                   disabled={busy}
                   onClick={() => act.mutate({ action: "images", sceneIds: [scene.id], quality })}
                   icon={<RefreshCw className="size-3.5" />}
-                  title={`Regenerate at ${QUALITY_LABEL[quality]}`}
+                  title={t("media.images.redoTitle", { quality: t(`media.images.quality.${quality}`) })}
                 >
-                  Redo
+                  {t("media.images.redo")}
                 </Button>
                 <Button size="sm" variant="ghost" onClick={() => setEditing(true)} icon={<Pencil className="size-3.5" />}>
-                  Edit
+                  {t("common.edit")}
                 </Button>
                 <Button
                   size="sm"
@@ -338,7 +347,7 @@ function SceneCard({
                   loading={uploading}
                   onClick={() => fileRef.current?.click()}
                   icon={<Upload className="size-3.5" />}
-                  aria-label="Upload your own image"
+                  aria-label={t("media.images.uploadOwn")}
                 />
                 <input
                   ref={fileRef}
@@ -349,7 +358,7 @@ function SceneCard({
                 />
               </>
             ) : (
-              <Badge>text frame</Badge>
+              <Badge>{t("media.images.textFrame")}</Badge>
             )}
           </div>
         )}

@@ -8,6 +8,11 @@ export type SettingKey =
   | "CLAUDE_MODEL"
   | "CLAUDE_BACKEND"
   | "IMAGE_BACKEND"
+  | "TTS_BACKEND"
+  | "LOCAL_TTS_URL"
+  | "LOCAL_TTS_API_KEY"
+  | "LOCAL_TTS_SAMPLE_RATE"
+  | "UI_LANGUAGE"
   | "CLAUDE_CLI_PATH"
   | "CODEX_CLI_PATH"
   | "CODEX_TEXT_MODEL"
@@ -155,6 +160,33 @@ export const BACKEND_SETTINGS: SettingDef[] = [
       { value: "codex", label: "Codex (my ChatGPT plan)" },
     ],
   },
+  {
+    key: "TTS_BACKEND",
+    label: "Voice connection",
+    help: "ElevenLabs API key (pay per character) or a local TTS server on this machine (VieNeu-TTS, free).",
+    default: "api",
+    options: [
+      { value: "api", label: "API key" },
+      { value: "local", label: "Local TTS (VieNeu)" },
+    ],
+  },
+  {
+    key: "LOCAL_TTS_URL",
+    label: "Local TTS server",
+    help: "OpenAI-compatible speech server. VieNeu: `uv run python -m apps.openai_speech` listens on port 8000.",
+    default: "http://127.0.0.1:8000/v1",
+  },
+  { key: "LOCAL_TTS_API_KEY", label: "Local TTS key", help: "Only if the server sets VIENEU_API_KEY.", default: "", secret: true },
+  {
+    key: "LOCAL_TTS_SAMPLE_RATE",
+    label: "Local TTS audio quality",
+    help: "VieNeu speaks at 48 kHz natively.",
+    default: "24000",
+    options: [
+      { value: "24000", label: "24 kHz" },
+      { value: "48000", label: "48 kHz (native)" },
+    ],
+  },
   { key: "CLAUDE_CLI_PATH", label: "Claude CLI path", help: "Leave empty to auto-detect.", default: "" },
   { key: "CODEX_CLI_PATH", label: "Codex CLI path", help: "Leave empty to auto-detect.", default: "" },
   { key: "CODEX_TEXT_MODEL", label: "Codex model for text", help: "Leave empty to use Codex's default model.", default: "" },
@@ -167,7 +199,18 @@ export const DRY_RUN: SettingDef = {
   default: "0",
 };
 
-export const ALL_SETTINGS: SettingDef[] = [...API_KEYS, ...BACKEND_SETTINGS, ...CLAUDE_SETTINGS, ...MODEL_SETTINGS, DRY_RUN];
+export const UI_LANGUAGE: SettingDef = {
+  key: "UI_LANGUAGE",
+  label: "App language",
+  help: "Language of the app's own buttons and labels. Each channel's videos keep their own language.",
+  default: "en",
+  options: [
+    { value: "en", label: "English" },
+    { value: "vi", label: "Tiếng Việt" },
+  ],
+};
+
+export const ALL_SETTINGS: SettingDef[] = [...API_KEYS, ...BACKEND_SETTINGS, ...CLAUDE_SETTINGS, ...MODEL_SETTINGS, DRY_RUN, UI_LANGUAGE];
 
 export type SettingSource = "saved" | "env" | "default";
 export type PublicSetting = { key: SettingKey; value: string; source: SettingSource; isSet: boolean };

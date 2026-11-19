@@ -9,6 +9,8 @@ export const channels = sqliteTable("channels", {
   name: text("name").notNull(),
   profile: text("profile", { mode: "json" }).$type<ChannelProfile>().notNull(),
   voiceId: text("voice_id"),
+  // Voice used when Settings → Voice connection is the local TTS server (voiceId is the ElevenLabs one).
+  localVoiceId: text("local_voice_id"),
   voiceSettings: text("voice_settings", { mode: "json" }).$type<VoiceSettings>(),
   pronunciations: text("pronunciations", { mode: "json" })
     .$type<Record<string, string>>()

@@ -1,6 +1,7 @@
 "use client";
 
 import { ArrowDown, ArrowUp, Plus, Trash2 } from "lucide-react";
+import { useT } from "@/lib/i18n";
 import { Button, Input } from "./ui";
 
 export type ListColumn<T> = {
@@ -20,7 +21,7 @@ export function RowListEditor<T extends object>({
   columns,
   onChange,
   newRow,
-  addLabel = "Add",
+  addLabel,
   canRemove,
   minRows = 0,
 }: {
@@ -33,6 +34,7 @@ export function RowListEditor<T extends object>({
   canRemove?: (row: T) => boolean;
   minRows?: number;
 }) {
+  const t = useT();
   const grid = { gridTemplateColumns: `${columns.map((c) => `${c.width ?? 1}fr`).join(" ")} auto` };
   const update = (i: number, key: keyof T, v: string) => onChange(value.map((r, j) => (j === i ? { ...r, [key]: v } : r)));
   const move = (i: number, d: -1 | 1) => {
@@ -59,28 +61,28 @@ export function RowListEditor<T extends object>({
               value={String(row[c.key] ?? "")}
               placeholder={c.placeholder}
               readOnly={c.locked?.(row)}
-              title={c.locked?.(row) ? "Used by the app; can't be renamed" : undefined}
+              title={c.locked?.(row) ? t("nav.listEditor.locked") : undefined}
               onChange={(e) => update(i, c.key, e.target.value)}
               aria-label={c.label}
             />
           ))}
           <div className="flex">
-            <Button size="sm" variant="ghost" disabled={i === 0} onClick={() => move(i, -1)} aria-label="Move up" icon={<ArrowUp className="size-3.5" />} />
-            <Button size="sm" variant="ghost" disabled={i === value.length - 1} onClick={() => move(i, 1)} aria-label="Move down" icon={<ArrowDown className="size-3.5" />} />
+            <Button size="sm" variant="ghost" disabled={i === 0} onClick={() => move(i, -1)} aria-label={t("nav.listEditor.moveUp")} icon={<ArrowUp className="size-3.5" />} />
+            <Button size="sm" variant="ghost" disabled={i === value.length - 1} onClick={() => move(i, 1)} aria-label={t("nav.listEditor.moveDown")} icon={<ArrowDown className="size-3.5" />} />
             <Button
               size="sm"
               variant="ghost"
               className="text-stone-400 hover:text-red-600"
               disabled={value.length <= minRows || (canRemove ? !canRemove(row) : false)}
               onClick={() => onChange(value.filter((_, j) => j !== i))}
-              aria-label="Remove"
+              aria-label={t("nav.listEditor.remove")}
               icon={<Trash2 className="size-3.5" />}
             />
           </div>
         </div>
       ))}
       <Button size="sm" variant="ghost" icon={<Plus className="size-3.5" />} onClick={() => onChange([...value, newRow()])}>
-        {addLabel}
+        {addLabel ?? t("nav.listEditor.add")}
       </Button>
     </div>
   );

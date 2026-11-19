@@ -1,0 +1,66 @@
+// Words used all over the app, plus labels that come from shared definitions (steps, settings).
+import type { Translation } from "../core";
+
+export const en = {
+  save: "Save",
+  saved: "Saved",
+  cancel: "Cancel",
+  delete: "Delete",
+  remove: "Remove",
+  edit: "Edit",
+  close: "Close",
+  retry: "Try again",
+  loading: "Loading…",
+  test: "Test",
+  default: "default",
+  steps: {
+    script: "Script",
+    adScript: "Brief & Script",
+    voice: "Voice",
+    scenes: "Scenes",
+    images: "Images",
+    render: "Preview & Render",
+    shorts: "Shorts",
+    publish: "Publish",
+  },
+  autoSteps: {
+    outline: "Outline",
+    script: "Script",
+    voice: "Voice",
+    scenes: "Scenes",
+    images: "Images",
+    render: "Render",
+  },
+};
+
+export const vi: Translation<typeof en> = {
+  save: "Lưu",
+  saved: "Đã lưu",
+  cancel: "Huỷ",
+  delete: "Xoá",
+  remove: "Gỡ",
+  edit: "Sửa",
+  close: "Đóng",
+  retry: "Thử lại",
+  loading: "Đang tải…",
+  test: "Kiểm tra",
+  default: "mặc định",
+  steps: {
+    script: "Kịch bản",
+    adScript: "Brief & Kịch bản",
+    voice: "Giọng đọc",
+    scenes: "Cảnh",
+    images: "Hình ảnh",
+    render: "Xem trước & Xuất video",
+    shorts: "Shorts",
+    publish: "Đăng tải",
+  },
+  autoSteps: {
+    outline: "Dàn ý",
+    script: "Kịch bản",
+    voice: "Giọng đọc",
+    scenes: "Cảnh",
+    images: "Hình ảnh",
+    render: "Xuất video",
+  },
+};

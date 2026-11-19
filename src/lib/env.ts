@@ -46,6 +46,23 @@ export const env = {
   get imageBackend() {
     return getSetting("IMAGE_BACKEND") === "codex" ? ("codex" as const) : ("api" as const);
   },
+  /** Where narration is spoken: ElevenLabs (API key) or a local OpenAI-compatible TTS server (VieNeu). */
+  get ttsBackend() {
+    return getSetting("TTS_BACKEND") === "local" ? ("local" as const) : ("elevenlabs" as const);
+  },
+  get localTtsUrl() {
+    return getSetting("LOCAL_TTS_URL").replace(/\/+$/, "");
+  },
+  get localTtsKey() {
+    return getSetting("LOCAL_TTS_API_KEY");
+  },
+  get localTtsSampleRate() {
+    return getSetting("LOCAL_TTS_SAMPLE_RATE") === "48000" ? 48000 : 24000;
+  },
+  /** PCM format of the active voice provider, e.g. "pcm_24000". */
+  get voiceFormat() {
+    return this.ttsBackend === "local" ? `pcm_${this.localTtsSampleRate}` : this.elevenLabsOutputFormat;
+  },
   get claudeCliPath() {
     return getSetting("CLAUDE_CLI_PATH");
   },
@@ -67,7 +84,7 @@ export function sampleRateFromFormat(format: string): number {
 export function keyStatus() {
   return {
     anthropic: env.claudeBackend !== "api" || Boolean(env.anthropicKey),
-    elevenlabs: Boolean(env.elevenLabsKey),
+    elevenlabs: env.ttsBackend === "local" || Boolean(env.elevenLabsKey),
     openai: env.imageBackend === "codex" || Boolean(env.openaiKey),
     dryRun: env.dryRun,
   };

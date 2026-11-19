@@ -14,6 +14,7 @@ import { templateOf } from "@/lib/ai/prompts";
 import type { Outline } from "@/lib/types";
 import { StaleBanner, StepFooter, StepHeader } from "@/components/step";
 import { Badge, Button, Card, EmptyState, ErrorNote, Input, Select, Spinner, Tabs, Textarea, cn, useSyncedState } from "@/components/ui";
+import { useT } from "@/lib/i18n";
 
 export default function ScriptPage() {
   const { id } = useParams<{ id: string }>();
@@ -27,6 +28,7 @@ function LongScriptPage() {
   const { data } = useProject(id);
   const qc = useQueryClient();
   const act = useProjectAction<{ outline?: Outline; text?: string }>(id);
+  const t = useT();
 
   const [draft, setDraft] = useState<string>("");
   const [streaming, setStreaming] = useState(false);
@@ -55,8 +57,8 @@ function LongScriptPage() {
   // Autosave edits (debounced). Never while Autopilot may be writing the script.
   useEffect(() => {
     if (!data || streaming || pilot || !loaded.current || draft === (data.project.script ?? "")) return;
-    const t = setTimeout(() => act.mutate({ action: "saveScript", script: draft }), 800);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => act.mutate({ action: "saveScript", script: draft }), 800);
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, streaming, pilot]);
 
@@ -118,23 +120,23 @@ function LongScriptPage() {
   const b = budget!;
   const tooLong = needsTrim(words, b);
   const wordTone = words < b.minWords * 0.9 || tooLong ? "amber" : "green";
-  const fmtLen = (m: number) => (m < 2 ? `${Math.round(m * 60)} s` : `${Math.round(m * 10) / 10} min`);
+  const fmtLen = (m: number) => (m < 2 ? t("script.seconds", { n: Math.round(m * 60) }) : t("script.minutes", { n: Math.round(m * 10) / 10 }));
   const voiced = data.project.audioDuration && data.project.script === draft ? data.project.audioDuration / 60 : null;
 
   return (
     <div>
       <StepHeader
-        title="Script"
+        title={t("script.title")}
         models={[
-          { label: "Outline", model: data.models.outline },
-          { label: "Script", model: data.models.script },
-          { label: "Fact check", model: data.models.fact_check },
+          { label: t("script.modelOutline"), model: data.models.outline },
+          { label: t("script.modelScript"), model: data.models.script },
+          { label: t("script.modelFactCheck"), model: data.models.fact_check },
         ]}
-        description="Approve an outline first, then have the full narration written from it. Edit freely; changes save automatically."
+        description={t("script.description")}
         actions={
           <>
             <Button size="sm" variant="ghost" onClick={() => setHistoryOpen(true)} icon={<History className="size-3.5" />}>
-              History
+              {t("script.history")}
             </Button>
             <a href={`/api/projects/${id}/export?type=script`}>
               <Button size="sm" variant="ghost" icon={<Download className="size-3.5" />} disabled={!draft}>
@@ -145,7 +147,7 @@ function LongScriptPage() {
         }
       />
       <StaleBanner data={data} step="script">
-        The script changed after it was approved.
+        {t("script.stale")}
       </StaleBanner>
 
       <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -156,27 +158,27 @@ function LongScriptPage() {
               value={view}
               onChange={setView}
               items={[
-                { value: "edit", label: "Edit" },
-                { value: "paragraphs", label: "Paragraphs" },
+                { value: "edit", label: t("script.tabEdit") },
+                { value: "paragraphs", label: t("script.tabParagraphs") },
               ]}
             />
             <Badge tone={words ? wordTone : "neutral"}>
-              {words.toLocaleString()} words · ≈ {fmtLen(minutes)}
-              {words && tooLong ? ` · over the ${fmtLen(b.maxMinutes)} limit` : ""}
+              {t("script.wordsLen", { count: words, len: fmtLen(minutes) })}
+              {words && tooLong ? t("script.overLimit", { max: fmtLen(b.maxMinutes) }) : ""}
             </Badge>
-            <span className="text-xs text-stone-500" title={`At ${b.wpm} words per minute${b.measured ? ", measured from your voice" : ""}`}>
-              Target {fmtLen(b.minMinutes)}–{fmtLen(b.maxMinutes)} ({b.minWords.toLocaleString()}–{b.maxWords.toLocaleString()} words)
-              {voiced ? ` · voiced: ${Math.floor(voiced)}:${String(Math.round((voiced % 1) * 60)).padStart(2, "0")}` : ""}
+            <span className="text-xs text-stone-500" title={t(b.measured ? "script.wpmMeasured" : "script.wpmTitle", { wpm: b.wpm })}>
+              {t("script.target", { min: fmtLen(b.minMinutes), max: fmtLen(b.maxMinutes), minWords: b.minWords, maxWords: b.maxWords })}
+              {voiced ? t("script.voiced", { time: `${Math.floor(voiced)}:${String(Math.round((voiced % 1) * 60)).padStart(2, "0")}` }) : ""}
             </span>
             {draft && !streaming ? (
               long.length ? (
-                <button onClick={() => setView("paragraphs")} title="Show them highlighted in the Paragraphs view">
+                <button onClick={() => setView("paragraphs")} title={t("script.showLong")}>
                   <Badge tone="amber">
-                    {long.length} sentence{long.length === 1 ? "" : "s"} over {pace?.maxWordsPerSentence} words
+                    {t(long.length === 1 ? "script.longOne" : "script.longMany", { count: long.length, max: pace?.maxWordsPerSentence ?? "" })}
                   </Badge>
                 </button>
               ) : (
-                <Badge tone="green">Short sentences ✓</Badge>
+                <Badge tone="green">{t("script.shortOk")}</Badge>
               )
             ) : null}
             <div className="ml-auto flex gap-2">
@@ -185,10 +187,10 @@ function LongScriptPage() {
                 onClick={() => writeScript("write")}
                 loading={streaming && phase === "writing"}
                 disabled={!outline || pilot}
-                title={pilot ? "Autopilot is running" : !outline ? "Create the outline first" : undefined}
+                title={pilot ? t("script.autopilotRunning") : !outline ? t("script.outlineFirst") : undefined}
                 icon={draft ? <RefreshCw className="size-4" /> : <Sparkles className="size-4" />}
               >
-                {streaming && phase === "writing" ? "Writing…" : draft ? "Rewrite script" : "Write script"}
+                {streaming && phase === "writing" ? t("script.writing") : draft ? t("script.rewriteScript") : t("script.writeScript")}
               </Button>
               {draft && tooLong ? (
                 <Button
@@ -196,10 +198,10 @@ function LongScriptPage() {
                   onClick={() => writeScript("trim")}
                   loading={streaming && phase === "trimming"}
                   disabled={streaming || pilot}
-                  title="Cut weaker sentences and side details until the script fits the channel's length. The current version is kept in History."
+                  title={t("script.trimTitle")}
                   icon={<Shrink className="size-4" />}
                 >
-                  {streaming && phase === "trimming" ? "Trimming…" : "Trim to fit"}
+                  {streaming && phase === "trimming" ? t("script.trimming") : t("script.trim")}
                 </Button>
               ) : null}
               {draft && long.length ? (
@@ -208,10 +210,10 @@ function LongScriptPage() {
                   onClick={() => writeScript("shorten")}
                   loading={streaming && phase === "shortening"}
                   disabled={streaming || pilot}
-                  title="Split sentences that are too long into short spoken ones. Facts and paragraphs stay the same; the current version is kept in History."
+                  title={t("script.shortenTitle")}
                   icon={<Scissors className="size-4" />}
                 >
-                  {streaming && phase === "shortening" ? "Shortening…" : "Shorten long sentences"}
+                  {streaming && phase === "shortening" ? t("script.shortening") : t("script.shorten")}
                 </Button>
               ) : null}
               {draft ? (
@@ -220,10 +222,10 @@ function LongScriptPage() {
                   onClick={() => writeScript("polish")}
                   loading={streaming && phase === "polishing"}
                   disabled={streaming || pilot}
-                  title="Rewrite so it sounds like natural spoken language. Facts and paragraphs stay the same; the current version is kept in History."
+                  title={t("script.polishTitle")}
                   icon={<MessageCircle className="size-4" />}
                 >
-                  {streaming && phase === "polishing" ? "Polishing…" : "Make it sound natural"}
+                  {streaming && phase === "polishing" ? t("script.polishing") : t("script.polish")}
                 </Button>
               ) : null}
             </div>
@@ -231,16 +233,15 @@ function LongScriptPage() {
           {streamError ? <ErrorNote error={streamError} /> : null}
 
           {!draft && !streaming ? (
-            <EmptyState icon={<PenLine className="size-8" />} title="No script yet">
-              {outline ? "The outline is ready. Click Write script to stream it in." : "Start with the outline on the right."} Blank lines
-              separate paragraphs, and each paragraph is voiced separately.
+            <EmptyState icon={<PenLine className="size-8" />} title={t("script.empty")}>
+              {outline ? t("script.emptyReady") : t("script.emptyStart")} {t("script.emptyBlank")}
             </EmptyState>
           ) : view === "edit" ? (
             <Textarea
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               readOnly={streaming || pilot}
-              title={pilot ? "Autopilot is running; edit when it pauses or finishes" : undefined}
+              title={pilot ? t("script.editLocked") : undefined}
               className="min-h-[60vh] resize-y p-5 font-[Georgia,serif] text-[16px] leading-8"
               spellCheck
             />
@@ -284,8 +285,8 @@ function LongScriptPage() {
         canApprove={Boolean(draft.trim()) && !streaming && !pilot}
         hint={
           data.project.factChecks?.some((c) => c.confidence === "low" && !c.verified)
-            ? "Some facts are flagged as low confidence. Check them before approving."
-            : "Approving splits the script into paragraphs and sentences for voicing."
+            ? t("script.hintLowConfidence")
+            : t("script.hintApprove")
         }
       />
     </div>
@@ -308,11 +309,12 @@ function OutlinePanel({
   onGenerate: (template: string) => void;
 }) {
   const act = useProjectAction(id);
+  const t = useT();
   const [local, setLocal] = useSyncedState<Outline | null>(outline);
   const channelTemplate = templateOf(profile);
-  const templateNames = [channelTemplate.name, ...OUTLINE_TEMPLATES.map((t) => t.name).filter((n) => n !== channelTemplate.name)];
+  const templateNames = [channelTemplate.name, ...OUTLINE_TEMPLATES.map((x) => x.name).filter((n) => n !== channelTemplate.name)];
   const [template, setTemplate] = useState(channelTemplate.name);
-  const chosen = template === channelTemplate.name ? channelTemplate : OUTLINE_TEMPLATES.find((t) => t.name === template) ?? channelTemplate;
+  const chosen = template === channelTemplate.name ? channelTemplate : OUTLINE_TEMPLATES.find((x) => x.name === template) ?? channelTemplate;
 
   function edit(i: number, beats: string) {
     if (!local) return;
@@ -324,17 +326,17 @@ function OutlinePanel({
     <Card className="p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 font-medium">
-          <ListTree className="size-4 text-stone-500" /> Outline
+          <ListTree className="size-4 text-stone-500" /> {t("script.outline.title")}
         </div>
         <Button size="sm" variant={outline ? "ghost" : "primary"} loading={busy} onClick={() => onGenerate(template)} icon={<Sparkles className="size-3.5" />}>
-          {outline ? "Regenerate" : "Create outline"}
+          {outline ? t("script.outline.regenerate") : t("script.outline.create")}
         </Button>
       </div>
       <div className="mb-3">
-        <Select aria-label="Outline structure" className="h-8 text-[13px]" value={template} onChange={(e) => setTemplate(e.target.value)}>
+        <Select aria-label={t("script.outline.structure")} className="h-8 text-[13px]" value={template} onChange={(e) => setTemplate(e.target.value)}>
           {templateNames.map((n) => (
             <option key={n} value={n}>
-              {n === channelTemplate.name ? `${n} (channel default)` : n}
+              {n === channelTemplate.name ? t("script.outline.channelDefault", { name: n }) : n}
             </option>
           ))}
         </Select>
@@ -342,7 +344,7 @@ function OutlinePanel({
       {!local ? (
         <p className="text-sm text-stone-600">
           {chosen.beats.map((b) => b.name).join(" → ")}
-          {hook ? <span className="mt-2 block italic">Opening idea: “{hook}”</span> : null}
+          {hook ? <span className="mt-2 block italic">{t("script.outline.openingIdea", { hook })}</span> : null}
         </p>
       ) : (
         <div className="space-y-3">
@@ -357,9 +359,9 @@ function OutlinePanel({
                 onBlur={() => local && act.mutate({ action: "saveOutline", outline: local })}
               />
               {s.notes?.length ? (
-                <ul className="mt-1 space-y-0.5 text-[11px] italic text-stone-500" aria-label="Notes (not spoken)">
+                <ul className="mt-1 space-y-0.5 text-[11px] italic text-stone-500" aria-label={t("script.outline.notes")}>
                   {s.notes.map((n, j) => (
-                    <li key={j}>Note: {n}</li>
+                    <li key={j}>{t("script.outline.note", { note: n })}</li>
                   ))}
                 </ul>
               ) : null}
@@ -367,7 +369,7 @@ function OutlinePanel({
           ))}
           {local.evidence.length ? (
             <div>
-              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-stone-500">Evidence</div>
+              <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-stone-500">{t("script.outline.evidence")}</div>
               <div className="flex flex-wrap gap-1">
                 {local.evidence.map((e, i) => (
                   <Badge key={i}>{e}</Badge>
@@ -384,6 +386,7 @@ function OutlinePanel({
 function FactCheckPanel({ id, hasScript }: { id: string; hasScript: boolean }) {
   const { data } = useProject(id);
   const act = useProjectAction(id);
+  const t = useT();
   const checks = data?.project.factChecks ?? null;
   const tone = { high: "green", medium: "amber", low: "red" } as const;
 
@@ -391,7 +394,7 @@ function FactCheckPanel({ id, hasScript }: { id: string; hasScript: boolean }) {
     <Card className="p-4">
       <div className="mb-3 flex items-center justify-between gap-2">
         <div className="flex items-center gap-2 font-medium">
-          <FileSearch className="size-4 text-stone-500" /> Fact check
+          <FileSearch className="size-4 text-stone-500" /> {t("script.fact.title")}
         </div>
         <Button
           size="sm"
@@ -400,13 +403,13 @@ function FactCheckPanel({ id, hasScript }: { id: string; hasScript: boolean }) {
           loading={act.isPending && act.variables?.action === "factCheck"}
           onClick={() => act.mutate({ action: "factCheck" })}
         >
-          {checks ? "Re-run" : "Run"}
+          {checks ? t("script.fact.rerun") : t("script.fact.run")}
         </Button>
       </div>
       {!checks ? (
-        <p className="text-sm text-stone-600">Lists every named researcher, study, site and statistic, with a confidence level, so nothing made up slips through.</p>
+        <p className="text-sm text-stone-600">{t("script.fact.intro")}</p>
       ) : !checks.length ? (
-        <p className="text-sm text-stone-600">No named claims found.</p>
+        <p className="text-sm text-stone-600">{t("script.fact.none")}</p>
       ) : (
         <ul className="space-y-2">
           {checks.map((c, i) => (
@@ -421,7 +424,7 @@ function FactCheckPanel({ id, hasScript }: { id: string; hasScript: boolean }) {
                 <div className="min-w-0 text-[13px]">
                   <div className="flex flex-wrap items-center gap-1.5">
                     <span className="font-medium">{c.name}</span>
-                    <Badge tone={tone[c.confidence]}>{c.confidence}</Badge>
+                    <Badge tone={tone[c.confidence]}>{t.dyn(`script.fact.${c.confidence}`, c.confidence)}</Badge>
                   </div>
                   <div className="mt-0.5 text-stone-700">{c.claim}</div>
                   <div className="mt-0.5 text-stone-500">{c.note}</div>
@@ -450,6 +453,7 @@ function ParagraphList({
 }) {
   const paragraphs = useMemo(() => splitParagraphs(script), [script]);
   const act = useProjectAction<{ text: string }>(id);
+  const t = useT();
   const [instr, setInstr] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState<number | null>(null);
 
@@ -476,7 +480,7 @@ function ParagraphList({
         <Card key={i} className="p-4">
           <div className="mb-2 flex items-center justify-between text-xs text-stone-500">
             <span>
-              Paragraph {i + 1} · {wordCount(p, locale)} words
+              {t("script.para.heading", { n: i + 1, count: wordCount(p, locale) })}
             </span>
           </div>
           <p className="font-[Georgia,serif] text-[15px] leading-7 text-stone-800">
@@ -486,7 +490,7 @@ function ParagraphList({
                 <span
                   key={j}
                   className={cn(w > maxWords && "rounded bg-amber-100 underline decoration-amber-400 decoration-2")}
-                  title={w > maxWords ? `${w} words (limit ${maxWords})` : undefined}
+                  title={w > maxWords ? t("script.para.wordsLimit", { count: w, max: maxWords }) : undefined}
                 >
                   {s.text}{" "}
                 </span>
@@ -496,13 +500,13 @@ function ParagraphList({
           <div className="mt-3 flex gap-2">
             <Input
               className="h-8 text-[13px]"
-              placeholder="How should it change? (optional, e.g. punchier, add a question)"
+              placeholder={t("script.para.instruction")}
               value={instr[i] ?? ""}
               onChange={(e) => setInstr({ ...instr, [i]: e.target.value })}
               onKeyDown={(e) => e.key === "Enter" && rewrite(i)}
             />
             <Button size="sm" loading={busy === i} disabled={busy !== null && busy !== i} onClick={() => rewrite(i)} icon={<Wand2 className="size-3.5" />}>
-              Rewrite
+              {t("script.para.rewrite")}
             </Button>
           </div>
         </Card>

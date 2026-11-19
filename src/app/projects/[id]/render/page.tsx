@@ -13,6 +13,7 @@ import type { AdProps, VideoProps } from "@/remotion/types";
 import { JobBar, StaleBanner, StepFooter, StepHeader } from "@/components/step";
 import { RenderHistory } from "@/components/render-history";
 import { Button, Card, EmptyState, ErrorNote, Spinner, cn, fmtTime, useSyncedState } from "@/components/ui";
+import { useT } from "@/lib/i18n";
 
 /** Current Player frame. Kept in leaf components so playback doesn't re-render the whole page every frame. */
 function usePlayerFrame(player: RefObject<PlayerRef | null>, vp: unknown) {
@@ -49,6 +50,7 @@ export default function RenderPage() {
   const { id } = useParams<{ id: string }>();
   const { data } = useProject(id);
   const act = useProjectAction(id);
+  const t = useT();
   const ad = data?.channel.kind === "product_ad";
   // Silent ads have no voice to speed up: lines follow reading pace.
   const silent = data?.project.voiceMode === "none";
@@ -83,16 +85,16 @@ export default function RenderPage() {
   return (
     <div>
       <StepHeader
-        title="Preview & render"
-        description="This preview uses the same code as the final render, so what you see here is what you get. Images switch exactly on sentence starts from the voice timings."
+        title={t("media.render.title")}
+        description={t("media.render.description")}
       />
       <StaleBanner data={data} step="render">
-        Voice, scenes or images changed since the last approved render. Re-render to include the changes.
+        {t("media.render.stale")}
       </StaleBanner>
 
       {!ready ? (
-        <EmptyState icon={<Film className="size-8" />} title={silent ? "Needs an approved script and scenes" : "Needs voice and scenes"}>
-          {silent ? "Approve the script and plan scenes first." : "Generate the voice and plan scenes first."} Images can still be missing; they show as placeholders.
+        <EmptyState icon={<Film className="size-8" />} title={silent ? t("media.render.needsScriptScenes") : t("media.render.needsVoiceScenes")}>
+          {silent ? t("media.render.approveAndPlan") : t("media.render.voiceAndPlan")} {t("media.render.placeholdersNote")}
         </EmptyState>
       ) : (
         <div className="space-y-4">
@@ -133,19 +135,19 @@ export default function RenderPage() {
             </Card>
 
             <Card className="space-y-4 p-4">
-              <div className="font-medium">Options</div>
+              <div className="font-medium">{t("media.render.options")}</div>
               <label className="flex items-center justify-between gap-2 text-sm">
-                {silent ? "On-screen text (the script lines)" : "Burned-in captions"}
+                {silent ? t("media.render.onScreenText") : t("media.render.captions")}
                 <input type="checkbox" checked={captions} onChange={(e) => setCaptions(e.target.checked)} className="size-4 accent-orange-500" />
               </label>
               <label className="flex items-center justify-between gap-2 text-sm">
-                Slow zoom (Ken Burns)
+                {t("media.render.kenBurns")}
                 <input type="checkbox" checked={kenBurns} onChange={(e) => setKenBurns(e.target.checked)} className="size-4 accent-orange-500" />
               </label>
               {silent ? null : (
               <div>
                 <div className="mb-1 flex justify-between text-sm">
-                  <label htmlFor="speed">Speed</label>
+                  <label htmlFor="speed">{t("media.render.speed")}</label>
                   <span className="tabular-nums text-stone-500">
                     {rate.toFixed(2)}× · {fmtTime(baseDuration / rate)}
                   </span>
@@ -163,25 +165,25 @@ export default function RenderPage() {
                   className="w-full"
                 />
                 <div className="flex justify-between text-[11px] text-stone-400">
-                  <span>0.8× slower</span>
+                  <span>{t("media.render.slower")}</span>
                   <button className="hover:text-stone-700" onClick={() => act.mutate({ action: "setTiming", playbackRate: 1 })}>
-                    reset 1×
+                    {t("media.render.resetSpeed")}
                   </button>
-                  <span>1.3× faster</span>
+                  <span>{t("media.render.faster")}</span>
                 </div>
                 <p className="mt-1 text-[11px] text-stone-500">
-                  Speeds up voice, image cuts and captions together, with the voice pitch kept natural. Free, with no re-voicing. Most channels sit at 1.0–1.15×.
+                  {t("media.render.speedHelp")}
                 </p>
                 {ad && baseDuration / rate > 20 ? (
                   <p className="mt-1 text-[11px] font-medium text-amber-800">
-                    The voice runs {Math.round(baseDuration / rate)} s (plus a 2.5 s end card). Ads work best at 15–20 s: speed it up or shorten the script.
+                    {t("media.render.adTooLong", { seconds: Math.round(baseDuration / rate) })}
                   </p>
                 ) : null}
               </div>
               )}
               <div>
                 <div className="mb-1 flex justify-between text-sm">
-                  <span>Visual lead</span>
+                  <span>{t("media.render.visualLead")}</span>
                   <span className="tabular-nums text-stone-500">{leadMs} ms</span>
                 </div>
                 <input
@@ -193,11 +195,11 @@ export default function RenderPage() {
                   onChange={(e) => setLead(Number(e.target.value))}
                   onPointerUp={() => act.mutate({ action: "setTiming", visualLeadMs: leadMs }, { onSuccess: () => setLead(null) })}
                   className="w-full"
-                  aria-label="Visual lead in milliseconds"
+                  aria-label={t("media.render.visualLeadLabel")}
                 />
-                <p className="text-[11px] text-stone-500">Images appear this long before their first word. Around 150 ms feels natural.</p>
+                <p className="text-[11px] text-stone-500">{t("media.render.visualLeadHelp")}</p>
               </div>
-              {missingImages ? <p className="text-xs text-amber-700">{missingImages} scenes have no image yet and will render as placeholders.</p> : null}
+              {missingImages ? <p className="text-xs text-amber-700">{t("media.render.missingImages", { count: missingImages })}</p> : null}
               <Button
                 variant="primary"
                 className="w-full"
@@ -205,7 +207,7 @@ export default function RenderPage() {
                 loading={Boolean(running)}
                 onClick={() => act.mutate({ action: "render", showCaptions: captions, kenBurns })}
               >
-                {data.renderUrl ? "Re-render MP4" : "Render MP4"}
+                {data.renderUrl ? t("media.render.reRenderMp4") : t("media.render.renderMp4")}
               </Button>
               <JobBar job={job} />
               <ErrorNote error={act.error} />
@@ -228,14 +230,14 @@ export default function RenderPage() {
           {vp ? (
             <Card className="p-3">
               <div className="mb-2 flex items-center justify-between text-xs text-stone-500">
-                <span>Timeline: click a scene to jump, then nudge its start if a cut feels early or late</span>
+                <span>{t("media.render.timeline")}</span>
                 <span className="tabular-nums">{fmtTime(vp.durationInFrames / vp.fps)}</span>
               </div>
               <div className="relative flex h-16 w-full overflow-hidden rounded-md ring-1 ring-stone-200">
                 {vp.scenes.map((s, i) => (
                   <button
                     key={s.id}
-                    title={`#${i + 1} at ${fmtTime(s.fromFrame / vp.fps)}`}
+                    title={t("media.render.sceneAt", { n: i + 1, time: fmtTime(s.fromFrame / vp.fps) })}
                     onClick={() => {
                       setSelected(s.id);
                       // Land just after the crossfade so the scene is fully visible.
@@ -258,14 +260,14 @@ export default function RenderPage() {
               </div>
               {sel && selScene ? (
                 <div className="mt-3 flex flex-wrap items-center gap-3 text-sm">
-                  <span className="font-medium">Scene #{selScene.idx + 1}</span>
-                  <span className="tabular-nums text-stone-500">starts {fmtTime(sel.fromFrame / vp.fps)}</span>
+                  <span className="font-medium">{t("media.render.scene", { n: selScene.idx + 1 })}</span>
+                  <span className="tabular-nums text-stone-500">{t("media.render.starts", { time: fmtTime(sel.fromFrame / vp.fps) })}</span>
                   {selScene.idx > 0 ? (
                     <div className="flex items-center gap-1">
                       <Button
                         size="sm"
                         variant="secondary"
-                        aria-label="Start 100 ms earlier"
+                        aria-label={t("media.render.earlier")}
                         onClick={() => act.mutate({ action: "updateScene", sceneId: selScene.id, values: { nudgeMs: selScene.nudgeMs - 100 } })}
                         icon={<Minus className="size-3.5" />}
                       />
@@ -276,18 +278,18 @@ export default function RenderPage() {
                       <Button
                         size="sm"
                         variant="secondary"
-                        aria-label="Start 100 ms later"
+                        aria-label={t("media.render.later")}
                         onClick={() => act.mutate({ action: "updateScene", sceneId: selScene.id, values: { nudgeMs: selScene.nudgeMs + 100 } })}
                         icon={<Plus className="size-3.5" />}
                       />
                       {selScene.nudgeMs ? (
                         <Button size="sm" variant="ghost" onClick={() => act.mutate({ action: "updateScene", sceneId: selScene.id, values: { nudgeMs: 0 } })}>
-                          Reset
+                          {t("media.render.reset")}
                         </Button>
                       ) : null}
                     </div>
                   ) : (
-                    <span className="text-xs text-stone-500">The first scene always starts at 0:00</span>
+                    <span className="text-xs text-stone-500">{t("media.render.firstScene")}</span>
                   )}
                 </div>
               ) : null}
@@ -296,14 +298,14 @@ export default function RenderPage() {
 
           {data.renderUrl && !running ? (
             <Card className="overflow-hidden">
-              <div className="border-b border-stone-200 px-4 py-2.5 text-sm font-medium">Current render</div>
+              <div className="border-b border-stone-200 px-4 py-2.5 text-sm font-medium">{t("media.render.currentRender")}</div>
               <video src={data.renderUrl} controls className={cn("w-full bg-black", ad ? "mx-auto aspect-[9/16] max-w-[420px]" : "aspect-video")} />
             </Card>
           ) : null}
           {data.renders.length ? (
             <Card className="p-4">
-              <div className="mb-1 text-sm font-medium">Render history</div>
-              <p className="mb-2 text-xs text-stone-500">Every render is kept until you delete it. The newest is the current one.</p>
+              <div className="mb-1 text-sm font-medium">{t("media.render.history")}</div>
+              <p className="mb-2 text-xs text-stone-500">{t("media.render.historyHelp")}</p>
               <RenderHistory projectId={id} renders={data.renders} />
             </Card>
           ) : null}
@@ -313,9 +315,9 @@ export default function RenderPage() {
       <StepFooter data={data} step="render" canApprove={Boolean(data.renderUrl) && !running} hint={
           data.renderUrl
             ? ad
-              ? "Happy with the ad? Mark it done and download the MP4."
-              : "Happy with the render? Approve it and move on to metadata."
-            : "Render the MP4 to finish this step."
+              ? t("media.render.hintAd")
+              : t("media.render.hintVideo")
+            : t("media.render.hintRender")
         } />
     </div>
   );
