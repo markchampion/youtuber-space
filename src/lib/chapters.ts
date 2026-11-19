@@ -40,6 +40,16 @@ export function splitChapters(script: string | null | undefined): StoryChapter[]
   return out;
 }
 
+/** The script without its chapter marker lines: what actually gets voiced when a whole story is one video. */
+export function stripChapterHeaders(script: string): string {
+  return script
+    .split("\n")
+    .filter((l) => !MARKER.test(l.trim()))
+    .join("\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 /** Inverse of splitChapters. */
 export function joinChapters(chapters: StoryChapter[], language?: string): string {
   return chapters.map((c) => `${chapterHeader(c.n, c.title, language)}\n\n${c.text.trim()}`).join("\n\n");

@@ -1,4 +1,4 @@
-import { genreOf, isDrama, lengthBudget, pacingOf, type ChannelProfile, type OutlineTemplate, type TopicAngle } from "@/lib/channel";
+import { genreOf, isDrama, lengthBudget, pacingOf, storyFormatOf, type ChannelProfile, type OutlineTemplate, type TopicAngle } from "@/lib/channel";
 import { beatOfKey, beatsOfRole, chapterOfKey, defaultTemplateFor, expandDramaTemplate, isChapterTemplate } from "@/lib/outline-templates";
 import { GENERIC_SPEECH_GUIDE, getLanguage } from "@/lib/languages";
 import type { Outline, SeriesEpisode } from "@/lib/types";
@@ -108,6 +108,7 @@ export const DRAMA_RULES = `Write a narrated drama, not an explainer:
 - About two thirds dialogue. Write dialogue inline without quotation marks, dashes or speaker labels; make the speaker clear from the sentence before it or from how they address each other (Bố ơi…, Anh Đức…). Each spoken line is its own sentence or short paragraph.
 - Concrete over abstract: exact names, ages, jobs, streets, markets, years and money amounts; one sensory detail per scene (rain on a tin roof, a ticking clock, a smell from the kitchen).
 - Sound words at moments of shock, on their own: Rầm! Choang! Cạch. Bốp!
+- Every video opens with a HOOK: its very first 1–3 sentences tease the biggest drama (the cruel act, the stakes, a twist to come) without revealing the ending, so the listener can't stop. Never open a video with a greeting, a name list or the setting.
 - Every chapter opens cold on dialogue in the middle of a scene and ends on a forward hook (Họ không hề biết rằng…).
 - Escalate steadily: each scene makes things worse or reveals something, until the reversal. Antagonists get a human reason; the ending restores dignity, not revenge.
 - State the moral plainly at the end, in short numbered lessons, including one practical lesson the audience can use.
@@ -122,8 +123,8 @@ export function templateOf(p: ChannelProfile): OutlineTemplate {
 export const styleRules = (p: ChannelProfile) => (isDrama(p) ? DRAMA_RULES : CASUAL_RULES);
 
 /** Word and time budget for each part of the structure, scaled to the channel's target length. */
-export function beatBudgets(p: ChannelProfile, template: OutlineTemplate = templateOf(p)) {
-  const b = lengthBudget(p);
+export function beatBudgets(p: ChannelProfile, template: OutlineTemplate = templateOf(p), chapterWords?: number) {
+  const b = { ...lengthBudget(p), ...(chapterWords ? { targetWords: chapterWords } : {}) };
   // Chapter templates: every chapter is its own video, so the channel length is split within each chapter (or role group).
   const group = (x: OutlineTemplate["beats"][number]) => (isChapterTemplate(template) ? String(chapterOfKey(x.key) ?? x.role ?? "middle") : "all");
   const totals = new Map<string, number>();
@@ -132,6 +133,21 @@ export function beatBudgets(p: ChannelProfile, template: OutlineTemplate = templ
     const words = Math.max(5, Math.round((b.targetWords * beat.share) / (totals.get(group(beat)) || 1)));
     return { beat, words, secs: Math.round((words / b.wpm) * 60) };
   });
+}
+
+/** "Whole story as one video": about how many chapters of ~9 minutes fit the channel length. */
+export function suggestedChapters(p: ChannelProfile) {
+  return Math.max(2, Math.min(15, Math.round(lengthBudget(p).maxMinutes / 9)));
+}
+
+/**
+ * Words and minutes for one chapter of a story with `count` chapters. One video per chapter: the channel length is the
+ * chapter length. Whole story as one video: the channel length is shared by all chapters.
+ */
+export function chapterBudget(p: ChannelProfile, count: number) {
+  const b = lengthBudget(p);
+  const n = storyFormatOf(p) === "single" ? Math.max(1, count) : 1;
+  return { targetWords: Math.round(b.targetWords / n), maxWords: Math.round(b.maxWords / n), maxMinutes: b.maxMinutes / n };
 }
 
 /** How many chapters a drama outline should have: a fixed number, or "auto" (the AI decides from the story). */
@@ -221,14 +237,18 @@ const STORY_BIBLE_RULE = `Use "evidence" as the story bible: one line per fixed 
  */
 function storyOutlinePrompt(p: ChannelProfile, title: string, hook: string | null | undefined, template: OutlineTemplate, chapters: ChapterCount) {
   const b = lengthBudget(p);
+  const single = storyFormatOf(p) === "single";
+  const guess = chapters === "auto" ? (single ? suggestedChapters(p) : 1) : Math.max(1, Math.round(chapters));
+  const per = chapterBudget(p, guess);
   const line = (x: { beat: OutlineTemplate["beats"][number]; words: number }, key: string) =>
     `- key="${key}", ${x.beat.name} (~${x.words} words): ${x.beat.purpose}${x.beat.guidance ? ` Guidance: ${x.beat.guidance}` : ""}`;
   let structure: string;
   if (chapters === "auto") {
-    const budgets = beatBudgets(p, template);
+    const budgets = beatBudgets(p, template, per.targetWords);
     const group = (role: "first" | "middle" | "last", prefix: string) =>
       budgets.filter((x) => beatsOfRole(template, role).includes(x.beat)).map((x) => line(x, `${prefix}_${x.beat.key}`)).join("\n");
-    structure = `Decide how many chapters this story needs: between ${AUTO_CHAPTERS.min} and ${AUTO_CHAPTERS.max}. Use more chapters only when the plot has enough real turns to fill them; never pad.
+    const range = single ? { min: Math.max(2, guess - 1), max: guess + 1 } : AUTO_CHAPTERS;
+    structure = `Decide how many chapters this story needs: between ${range.min} and ${range.max}. Use more chapters only when the plot has enough real turns to fill them; never pad.
 Chapter 1 has these sections:
 ${group("first", "c1")}
 Every middle chapter k (2 up to N-1) has these sections, with k in the key:
@@ -240,13 +260,17 @@ Replace k and N with the real chapter numbers (e.g. "c2_reveal", "c5_moral_cta")
     const n = Math.max(1, Math.min(30, Math.round(chapters)));
     const expanded = expandDramaTemplate(template, n);
     structure = `The story has exactly ${n} chapter${n === 1 ? "" : "s"}. Exactly one section per step, in this order, using the given key:
-${beatBudgets(p, expanded)
+${beatBudgets(p, expanded, per.targetWords)
   .map((x) => line(x, x.beat.key))
   .join("\n")}`;
   }
   return `Create the outline for a narrated drama titled "${title}".${hook ? ` Suggested opening: "${hook}"` : ""}
 
-Every chapter is published as its own video of about ${fmtMinutes(b.maxMinutes)} (~${b.targetWords} words), so each chapter needs its own cold open, its own rising tension and its own cliffhanger.
+${
+    single
+      ? `The whole story is ONE video of about ${fmtMinutes(b.maxMinutes)} (~${b.targetWords} words in total), told in chapters of about ${fmtMinutes(per.maxMinutes)} each. Every chapter opens cold on a new scene and ends on a forward hook; the first call to action comes right after the first hook in chapter 1, the second at the very end.`
+      : `Every chapter is published as its own video of about ${fmtMinutes(b.maxMinutes)} (~${b.targetWords} words), so each chapter needs its own cold open, its own rising tension and its own cliffhanger.`
+  }
 <structure>
 ${structure}
 </structure>
@@ -306,14 +330,15 @@ export function scriptChapterPrompt(p: ChannelProfile, title: string, outline: O
     .join("\n\n");
   const own = outline.sections.filter((s) => chapterOfKey(s.key) === chapter);
   const notes = own.flatMap((s) => (s.notes ?? []).map((n) => `${s.title}: ${n}`));
-  const b = lengthBudget(p);
+  const b = chapterBudget(p, chapterCount);
+  const single = storyFormatOf(p) === "single";
   const template = templateOf(p);
   const shares = own.map((s) => beatOfKey(template, s.key, chapterCount)?.share ?? 10);
   const total = shares.reduce((a, x) => a + x, 0) || 1;
   const parts = own.map((s, i) => `${s.title} ~${Math.round((b.targetWords * shares[i]) / total)}`);
   const first = chapter === 1;
   const last = chapter === chapterCount;
-  return `You are writing "${title}", a narrated drama in ${chapterCount} chapters. Every chapter is published as its own video. Write ONLY chapter ${chapter} of ${chapterCount}${info(chapter)?.title ? ` ("${info(chapter)!.title}")` : ""}: the sections marked >>> below.
+  return `You are writing "${title}", a narrated drama in ${chapterCount} chapters. ${single ? "The chapters play one after another in a single long video." : "Every chapter is published as its own video."} Write ONLY chapter ${chapter} of ${chapterCount}${info(chapter)?.title ? ` ("${info(chapter)!.title}")` : ""}: the sections marked >>> below.
 
 <outline>
 ${o}
@@ -323,8 +348,20 @@ Story bible (keep every fact exactly): ${outline.evidence.join("; ")}
 ${previous.trim() ? `\n<story_so_far>\n${previous.trim()}\n</story_so_far>\nContinue from here. Never contradict it, never repeat its scenes, keep every name, age, place and amount the same.\n` : ""}${notes.length ? `\n<creator_notes>\nRespect these, but never say them out loud:\n${list(notes)}\n</creator_notes>\n` : ""}
 Rules:
 - Length: about ${b.targetWords} words for this chapter, at most ${b.maxWords} (${parts.join(", ")}).
-- ${first ? "Open cold on the shouted line of dialogue." : "Open cold on new dialogue in the middle of a scene. Right after that opening, the narrator gives a 1–2 sentence recap for listeners who missed the previous part (e.g. 'Ở phần trước, …'), then the story goes on."}
-- ${last ? "This is the last chapter: resolve everything, then the moral and the closing call to action." : `End with a short call to like, subscribe and wait for the next part (part ${chapter + 1}), then one forward hook line into it.`}
+- ${
+    first
+      ? "The very first sentences are the hook: 1–3 sentences (under 20 seconds) that tease the whole story's drama and stakes and promise a twist, without revealing how it ends. Then cut straight into the cold open on the shouted line of dialogue."
+      : single
+        ? "Open cold on new dialogue in the middle of a scene; don't recap the previous chapter (the listener just heard it)."
+        : "This part is its own video, so its very first sentences are a hook: 1–3 sentences that tease this part's biggest moment and what is at stake, without revealing it. Then a 1–2 sentence recap for listeners who missed the previous part (e.g. 'Ở phần trước, …'), then cut into the scene on new dialogue."
+  }
+- ${
+    last
+      ? "This is the last chapter: resolve everything, then the moral and the closing call to action."
+      : single
+        ? `End on a forward hook into chapter ${chapter + 1} (e.g. 'Họ không hề biết rằng…').${first ? " The chapter's call to action comes right after its first hook, as the outline says." : " No call to action here."}`
+        : `End with a short call to like, subscribe and wait for the next part (part ${chapter + 1}), then one forward hook line into it.`
+  }
 - Pure narration as plain text. No chapter title, no headers, no markdown, no brackets, no stage directions.
 - Separate paragraphs with a blank line. Keep paragraphs to 1–6 sentences — each paragraph is voiced separately.
 - Follow the channel voice and the story rule${p.voiceSample?.trim() ? "; match the voice sample" : ""}.
@@ -505,9 +542,9 @@ Output only the script.`;
 }
 
 /** Cut an over-long script down to the channel's length. */
-export function trimPrompt(p: ChannelProfile, script: string, words: number) {
+export function trimPrompt(p: ChannelProfile, script: string, words: number, limit?: { maxWords: number; maxMinutes: number }) {
   const lang = getLanguage(p.language);
-  const b = lengthBudget(p);
+  const b = { ...lengthBudget(p), ...(limit ?? {}) };
   const goal = Math.round(b.maxWords * 0.95);
   return `Here is a ${lang.name} narration script of about ${words} words. It is too long: the video may be at most ${b.maxWords} words (about ${fmtMinutes(b.maxMinutes)} spoken). Cut it to about ${goal} words.
 

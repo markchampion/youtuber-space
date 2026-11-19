@@ -52,11 +52,22 @@ export function genreOf(p: Pick<ChannelProfile, "genre">): ChannelGenre {
 }
 export const isDrama = (p: Pick<ChannelProfile, "genre">) => genreOf(p) === "drama";
 
+/**
+ * How a drama channel publishes a story. "episodes" = one video per chapter (the story project only holds the text).
+ * "single" = the whole story is one long video, still written chapter by chapter.
+ */
+export type StoryFormat = "episodes" | "single";
+export function storyFormatOf(p: Pick<ChannelProfile, "storyFormat">): StoryFormat {
+  return p.storyFormat === "single" ? "single" : "episodes";
+}
+
 export type ChannelProfile = {
   /** Missing means "longform" (every channel made before product ads). */
   kind?: ChannelKind;
   /** Missing means "explainer". */
   genre?: ChannelGenre;
+  /** Drama channels only. Missing means "episodes". */
+  storyFormat?: StoryFormat;
   name: string;
   /** Language of everything the audience sees or hears (BCP-47, see src/lib/languages.ts). Defaults to English. */
   language?: string;

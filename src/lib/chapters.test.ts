@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { chapterHeader, hasChapters, joinChapters, splitChapters } from "./chapters";
+import { chapterHeader, hasChapters, joinChapters, splitChapters, stripChapterHeaders } from "./chapters";
 
 describe("story chapters", () => {
   const chapters = [
@@ -23,5 +23,9 @@ describe("story chapters", () => {
     expect(hasChapters("Just a script.\n\nNo markers.")).toBe(false);
     expect(splitChapters("Just a script.")).toEqual([]);
     expect(hasChapters(joinChapters(chapters, "vi"))).toBe(true);
+  });
+
+  it("strips the marker lines so they are never voiced", () => {
+    expect(stripChapterHeaders(joinChapters(chapters, "vi"))).toBe("Rầm! Cánh cửa bật tung.\n\nThưa quý cô bác.\n\nChoang! Ở phần trước.");
   });
 });

@@ -1,6 +1,6 @@
 import type { AutoStep, ChannelProfile, LegacyFields, ProfileV1 } from "./channel";
 import { FONT_OPTIONS, getLanguage } from "./languages";
-import { AUTO_STEPS, CHAPTER_ROLES, DEFAULT_LENGTH, autopilotOf, genreOf, pacingOf } from "./channel";
+import { AUTO_STEPS, CHAPTER_ROLES, DEFAULT_LENGTH, autopilotOf, genreOf, pacingOf, storyFormatOf } from "./channel";
 import { DEFAULT_OUTLINE_TEMPLATE, defaultTemplateFor } from "./outline-templates";
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -82,6 +82,7 @@ export function normalizeProfile(input: ChannelProfile | ProfileV1): ChannelProf
   return {
     ...rest,
     genre: genreOf(p),
+    storyFormat: storyFormatOf(p),
     format: stripLength(p.format ?? ""),
     profileVersion: 2,
     autopilot,
