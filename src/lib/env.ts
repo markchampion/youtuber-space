@@ -36,6 +36,11 @@ export const env = {
     return Math.max(1, Number(getSetting("IMAGE_CONCURRENCY")) || 4);
   },
   /** Where text is written: Anthropic API, Claude Code CLI, or Codex CLI (for people without a Claude plan). */
+  /** Settings → Thinking effort. "auto" keeps each step's own effort. */
+  get claudeEffort(): "low" | "medium" | "high" | "auto" {
+    const v = getSetting("CLAUDE_EFFORT");
+    return v === "low" || v === "high" || v === "auto" ? v : "medium";
+  },
   get claudeBackend() {
     const v = getSetting("CLAUDE_BACKEND");
     return v === "cli" || v === "codex" ? v : ("api" as const);

@@ -71,19 +71,36 @@ function textOf(msg: Anthropic.Beta.BetaMessage) {
     .join("");
 }
 
+/**
+ * How long a CLI call may run before it's stopped. Steps whose output grows with the video's length
+ * (a 60-minute script is ~7,000 words; its outline and scene plan are large JSON) can take well over
+ * 5 minutes on a high-effort model, so they get much more room. The limit only guards against a hung process.
+ */
+const LONG_KINDS = new Set(["outline", "script", "polish", "scenes", "series_plan", "fact_check", "metadata", "shorts"]);
+function cliTimeout(kind: string) {
+  return LONG_KINDS.has(kind) ? 30 * 60_000 : undefined; // undefined = the CLI default (5 min)
+}
+
 /** Settings → "Claude Code (my plan)": same call, sent through the local CLI instead of the API. */
 function cliOpts(o: Opts) {
   const model = o.model ?? modelFor(o.kind);
-  return { ...o, model, effort: supportsEffort(model) ? o.effort : undefined, timeoutMs: o.kind === "script" ? 15 * 60_000 : undefined };
+  return { ...o, model, effort: supportsEffort(model) ? o.effort : undefined, timeoutMs: cliTimeout(o.kind) };
 }
 
 /** Settings → "Codex (my ChatGPT plan)": Claude model presets don't apply; Codex uses its own model. */
 function codexOpts(o: Opts) {
-  return { ...o, timeoutMs: o.kind === "script" ? 15 * 60_000 : undefined };
+  return { ...o, timeoutMs: cliTimeout(o.kind) };
+}
+
+/** The effort setting overrides the per-call effort, unless it's "auto". */
+function withEffort<T extends Opts>(o: T): T {
+  const e = env.claudeEffort;
+  return e === "auto" ? o : { ...o, effort: e };
 }
 
 /** Structured output: returns data validated against the zod schema. */
-export async function claudeJSON<S extends z.ZodType>(schema: S, o: Opts): Promise<z.infer<S>> {
+export async function claudeJSON<S extends z.ZodType>(schema: S, opts: Opts): Promise<z.infer<S>> {
+  const o = withEffort(opts);
   if (env.claudeBackend === "cli") return cliJSON(schema, cliOpts(o));
   if (env.claudeBackend === "codex") return codexJSON(schema, codexOpts(o));
   const p = baseParams(o);
@@ -101,7 +118,8 @@ export async function claudeJSON<S extends z.ZodType>(schema: S, o: Opts): Promi
 }
 
 /** Streamed plain text. `onText` receives deltas as they arrive. */
-export async function claudeText(o: Opts & { onText?: (delta: string) => void }): Promise<string> {
+export async function claudeText(opts: Opts & { onText?: (delta: string) => void }): Promise<string> {
+  const o = withEffort(opts);
   if (env.claudeBackend === "cli") return cliText(cliOpts(o));
   if (env.claudeBackend === "codex") return codexText(codexOpts(o));
   const p = baseParams(o);

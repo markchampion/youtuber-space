@@ -47,6 +47,14 @@ export const en = {
     perVideo: "≈ ${cost} / video",
     custom: "Custom",
     customBlurb: "Pick the model for each step yourself.",
+    effort: "Thinking effort",
+    effortHelp: "How long Claude thinks before it writes. Higher can write slightly better long scripts but is much slower and uses more of your plan or budget.",
+    effortOptions: {
+      low: "Low — fastest",
+      medium: "Medium — recommended",
+      high: "High — slowest",
+      auto: "Per step — high for outline, script and polish",
+    },
   },
   cli: {
     testMessage: "Test (1 short message)",
@@ -198,6 +206,14 @@ export const vi: Translation<typeof en> = {
     perVideo: "≈ ${cost} / video",
     custom: "Tuỳ chỉnh",
     customBlurb: "Tự chọn mô hình cho từng bước.",
+    effort: "Mức suy nghĩ",
+    effortHelp: "Claude suy nghĩ bao lâu trước khi viết. Mức cao có thể viết kịch bản dài tốt hơn một chút nhưng chậm hơn nhiều và tốn hạn mức hoặc chi phí hơn.",
+    effortOptions: {
+      low: "Thấp — nhanh nhất",
+      medium: "Trung bình — đề xuất",
+      high: "Cao — chậm nhất",
+      auto: "Theo bước — cao cho dàn ý, kịch bản và trau chuốt",
+    },
   },
   cli: {
     testMessage: "Kiểm tra (1 tin nhắn ngắn)",

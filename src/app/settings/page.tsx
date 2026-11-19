@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, ExternalLink, Eye, EyeOff, KeyRound, Lock, XCircle } from "lucide-react";
 import { api } from "@/lib/client";
-import { ALL_SETTINGS, API_KEYS, DRY_RUN, MODEL_SETTINGS, UI_LANGUAGE, type PublicSetting, type SettingDef, type SettingKey } from "@/lib/settings-defs";
+import { ALL_SETTINGS, API_KEYS, CLAUDE_EFFORTS, DRY_RUN, MODEL_SETTINGS, UI_LANGUAGE, type PublicSetting, type SettingDef, type SettingKey } from "@/lib/settings-defs";
 import {
   CLAUDE_MODELS,
   CLAUDE_STEPS,
@@ -435,6 +435,28 @@ function ClaudeModelsCard({ byKey }: { byKey: Map<SettingKey, PublicSetting> }) 
             </button>
           );
         })}
+      </div>
+
+      <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1 rounded-lg px-3 py-2.5 ring-1 ring-stone-200">
+        <div className="min-w-[180px] flex-1">
+          <label htmlFor="claude-effort" className="text-sm font-medium">
+            {t("settings.claude.effort")}
+          </label>
+          <div className="text-xs text-stone-500">{t("settings.claude.effortHelp")}</div>
+        </div>
+        <Select
+          id="claude-effort"
+          className="h-9 w-72 text-[13px]"
+          value={byKey.get("CLAUDE_EFFORT")?.value || "medium"}
+          disabled={save.isPending}
+          onChange={(e) => save.mutate({ CLAUDE_EFFORT: e.target.value })}
+        >
+          {CLAUDE_EFFORTS.map((v) => (
+            <option key={v} value={v}>
+              {t(`settings.claude.effortOptions.${v}`)}
+            </option>
+          ))}
+        </Select>
       </div>
 
       {preset === "custom" ? (

@@ -1,4 +1,7 @@
 // Shared by the server (resolution) and the Settings page (rendering).
+/** "auto" = each step's built-in effort (high for outline, script and polish; medium for the rest). */
+export const CLAUDE_EFFORTS = ["low", "medium", "high", "auto"] as const;
+export type ClaudeEffortSetting = (typeof CLAUDE_EFFORTS)[number];
 import { CLAUDE_MODELS, CLAUDE_STEPS, customKey } from "./claude-models";
 
 export type SettingKey =
@@ -17,6 +20,7 @@ export type SettingKey =
   | "CODEX_CLI_PATH"
   | "CODEX_TEXT_MODEL"
   | "CLAUDE_PRESET"
+  | "CLAUDE_EFFORT"
   | ReturnType<typeof customKey>
   | "ELEVENLABS_MODEL"
   | "ELEVENLABS_OUTPUT_FORMAT"
@@ -70,6 +74,13 @@ export const CLAUDE_SETTINGS: SettingDef[] = [
     help: "Which Claude model writes each step.",
     default: "balanced",
     options: ["quality", "balanced", "cheapest", "custom"].map((v) => ({ value: v, label: v })),
+  },
+  {
+    key: "CLAUDE_EFFORT",
+    label: "Thinking effort",
+    help: "How hard Claude thinks before writing. Higher is slower and uses more of your plan or budget.",
+    default: "medium",
+    options: CLAUDE_EFFORTS.map((v) => ({ value: v, label: v })),
   },
   ...CLAUDE_STEPS.map((s) => ({
     key: customKey(s.key),
