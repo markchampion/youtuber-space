@@ -120,6 +120,7 @@ export const en = {
   },
   project: {
     freshAngle: "Fresh angle",
+    partOf: "Part {n} of {story}",
     narrationLength: "Narration length",
     spendTitle: "API spend on this video so far",
     spent: "Spent {cost}",
@@ -250,6 +251,7 @@ export const vi: Translation<typeof en> = {
   },
   project: {
     freshAngle: "Góc nhìn mới",
+    partOf: "Phần {n} của {story}",
     narrationLength: "Độ dài giọng đọc",
     spendTitle: "Chi phí API cho video này đến nay",
     spent: "Đã chi {cost}",

@@ -8,10 +8,15 @@ export type OutlineBeat = {
   purpose: string;
   guidance: string;
   share: number;
-  /** Drama templates: which chapter the beat belongs to (1-based). Scripts with chapters are written one chapter per AI call. */
-  chapter?: number;
+  /**
+   * Drama templates: which kind of chapter the beat belongs to. A story of N chapters uses the "first" beats for chapter 1,
+   * the "middle" beats for chapters 2..N-1 and the "last" beats for chapter N (see expandDramaTemplate).
+   */
+  role?: ChapterRole;
 };
 export type OutlineTemplate = { name: string; beats: OutlineBeat[] };
+export type ChapterRole = "first" | "middle" | "last";
+export const CHAPTER_ROLES: ChapterRole[] = ["first", "middle", "last"];
 
 export type Pacing = {
   maxWordsPerSentence: number; // script rule + long-sentence check

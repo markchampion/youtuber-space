@@ -77,6 +77,10 @@ export const projects = sqliteTable("projects", {
   voiceMode: text("voice_mode", { enum: ["voice", "none"] }).notNull().default("voice"),
   // Visual direction picked for this video so reuses of a product look different (product ads).
   variantHint: text("variant_hint"),
+  // Drama stories: a chapter video points at its story project (parentId) and says which chapter it is.
+  // Both null for ordinary videos and for the story project itself.
+  parentId: text("parent_id"),
+  chapter: integer("chapter"),
   createdAt: text("created_at").notNull().$defaultFn(now),
   updatedAt: text("updated_at").notNull().$defaultFn(now),
 });

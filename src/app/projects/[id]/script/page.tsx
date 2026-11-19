@@ -8,10 +8,15 @@ import { HistoryPanel } from "@/components/history-panel";
 import { AdScriptEditor } from "@/components/ad-script-editor";
 import { api, autopilotRunning, useProject, useProjectAction, type ProjectData } from "@/lib/client";
 import { estimateMinutes, longSentences, splitParagraphs, splitSentences, wordCount } from "@/lib/sync";
-import { lengthBudget, needsTrim, pacingOf, type ChannelProfile } from "@/lib/channel";
-import { ALL_OUTLINE_TEMPLATES } from "@/lib/outline-templates";
+import { isDrama, lengthBudget, needsTrim, pacingOf, type ChannelProfile } from "@/lib/channel";
+import { ALL_OUTLINE_TEMPLATES, chapterOfKey, isChapterTemplate } from "@/lib/outline-templates";
+import { chapterHeader, splitChapters } from "@/lib/chapters";
+import Link from "next/link";
 import { templateOf } from "@/lib/ai/prompts";
 import type { Outline } from "@/lib/types";
+
+type ChapterProgress = { n: number; count: number; phase: "writing" | "polish" | "trim" };
+const CHAPTER_MARKER = /\n?\[\[CHAPTER (\d+)\/(\d+)(?: (polish|trim))?\]\]\n?/g;
 import { StaleBanner, StepFooter, StepHeader } from "@/components/step";
 import { Badge, Button, Card, EmptyState, ErrorNote, Input, Select, Spinner, Tabs, Textarea, cn, useSyncedState } from "@/components/ui";
 import { useT } from "@/lib/i18n";
@@ -36,6 +41,7 @@ function LongScriptPage() {
   const [view, setView] = useState<"edit" | "paragraphs">("edit");
   const [historyOpen, setHistoryOpen] = useState(false);
   const [phase, setPhase] = useState<"writing" | "polishing" | "shortening" | "trimming" | null>(null);
+  const [progress, setProgress] = useState<ChapterProgress | null>(null);
   const loaded = useRef(false);
   const lastServer = useRef("");
   const pilot = autopilotRunning(data);
@@ -71,10 +77,13 @@ function LongScriptPage() {
   const profile = data?.channel.profile;
 
   /** Stream the script (or only the natural-speech pass) into the editor. */
-  async function writeScript(mode: "write" | "polish" | "shorten" | "trim" = "write") {
+  async function writeScript(mode: "write" | "continue" | "polish" | "shorten" | "trim" = "write") {
     setStreaming(true);
     setPhase(mode === "polish" ? "polishing" : mode === "shorten" ? "shortening" : mode === "trim" ? "trimming" : "writing");
     setStreamError(null);
+    setProgress(null);
+    // A story continued from a missing chapter keeps the chapters already written above the new text.
+    const before = mode === "continue" ? draft.trimEnd() : "";
     if (mode === "write") setDraft("");
     setView("edit");
     try {
@@ -91,6 +100,16 @@ function LongScriptPage() {
         if (err >= 0) {
           setStreamError(text.slice(err + 9).trim());
           text = text.slice(0, err).trimEnd();
+        }
+        // Stories: a marker before each chapter. Show progress and turn each marker into the chapter's header line.
+        if (text.includes("[[CHAPTER ")) {
+          const marks = [...text.matchAll(CHAPTER_MARKER)];
+          const m = marks[marks.length - 1];
+          if (m) setProgress({ n: Number(m[1]), count: Number(m[2]), phase: (m[3] as "polish" | "trim" | undefined) ?? "writing" });
+          text = text.replace(CHAPTER_MARKER, (_all, n: string, _c, ph?: string) =>
+            ph ? "" : `\n\n${chapterHeader(Number(n), data?.project.outline?.chapters?.find((c) => c.n === Number(n))?.title ?? "", locale)}\n\n`,
+          );
+          text = [before, text.trim()].filter(Boolean).join("\n\n");
         }
         // Each follow-up pass (natural speech, then trim if too long) replaces the text as it streams in.
         const polish = text.lastIndexOf("[[POLISH]]");
@@ -112,11 +131,16 @@ function LongScriptPage() {
       setDraft(fresh.project.script ?? "");
       setStreaming(false);
       setPhase(null);
+      setProgress(null);
     }
   }
 
   if (!data || !profile) return <Spinner />;
   const outline = data.project.outline;
+  const isStory = data.story.isStory;
+  const plannedChapters = outline ? [...new Set(outline.sections.map((s) => chapterOfKey(s.key)).filter((n): n is number => n != null))] : [];
+  const writtenChapters = isStory ? splitChapters(draft).filter((c) => c.text.trim()) : [];
+  const nextChapter = isStory && writtenChapters.length ? plannedChapters.find((n) => !writtenChapters.some((c) => c.n === n)) : undefined;
   const b = budget!;
   const tooLong = needsTrim(words, b);
   const wordTone = words < b.minWords * 0.9 || tooLong ? "amber" : "green";
@@ -162,10 +186,22 @@ function LongScriptPage() {
                 { value: "paragraphs", label: t("script.tabParagraphs") },
               ]}
             />
-            <Badge tone={words ? wordTone : "neutral"}>
-              {t("script.wordsLen", { count: words, len: fmtLen(minutes) })}
-              {words && tooLong ? t("script.overLimit", { max: fmtLen(b.maxMinutes) }) : ""}
-            </Badge>
+            {isStory ? (
+              <Badge tone="neutral">{t("script.story.chapters", { count: writtenChapters.length, words })}</Badge>
+            ) : (
+              <Badge tone={words ? wordTone : "neutral"}>
+                {t("script.wordsLen", { count: words, len: fmtLen(minutes) })}
+                {words && tooLong ? t("script.overLimit", { max: fmtLen(b.maxMinutes) }) : ""}
+              </Badge>
+            )}
+            {progress ? (
+              <span className="text-xs font-medium text-brand-ink">
+                {t(progress.phase === "polish" ? "script.story.polishingChapter" : progress.phase === "trim" ? "script.story.trimmingChapter" : "script.story.writingChapter", {
+                  n: progress.n,
+                  count: progress.count,
+                })}
+              </span>
+            ) : null}
             <span className="text-xs text-stone-500" title={t(b.measured ? "script.wpmMeasured" : "script.wpmTitle", { wpm: b.wpm })}>
               {t("script.target", { min: fmtLen(b.minMinutes), max: fmtLen(b.maxMinutes), minWords: b.minWords, maxWords: b.maxWords })}
               {voiced ? t("script.voiced", { time: `${Math.floor(voiced)}:${String(Math.round((voiced % 1) * 60)).padStart(2, "0")}` }) : ""}
@@ -192,7 +228,12 @@ function LongScriptPage() {
               >
                 {streaming && phase === "writing" ? t("script.writing") : draft ? t("script.rewriteScript") : t("script.writeScript")}
               </Button>
-              {draft && tooLong ? (
+              {nextChapter && !streaming ? (
+                <Button variant="primary" onClick={() => writeScript("continue")} disabled={pilot} icon={<Sparkles className="size-4" />}>
+                  {t("script.story.continue", { n: nextChapter, count: plannedChapters.length })}
+                </Button>
+              ) : null}
+              {!isStory && draft && tooLong ? (
                 <Button
                   variant="secondary"
                   onClick={() => writeScript("trim")}
@@ -204,7 +245,7 @@ function LongScriptPage() {
                   {streaming && phase === "trimming" ? t("script.trimming") : t("script.trim")}
                 </Button>
               ) : null}
-              {draft && long.length ? (
+              {!isStory && draft && long.length ? (
                 <Button
                   variant="secondary"
                   onClick={() => writeScript("shorten")}
@@ -216,7 +257,7 @@ function LongScriptPage() {
                   {streaming && phase === "shortening" ? t("script.shortening") : t("script.shorten")}
                 </Button>
               ) : null}
-              {draft ? (
+              {!isStory && draft ? (
                 <Button
                   variant="secondary"
                   onClick={() => writeScript("polish")}
@@ -248,6 +289,7 @@ function LongScriptPage() {
           ) : (
             <ParagraphList id={id} script={draft} onChange={setDraft} locale={locale} maxWords={pace?.maxWordsPerSentence ?? 14} />
           )}
+          {isStory && writtenChapters.length && !streaming ? <ChaptersPanel data={data} script={draft} /> : null}
         </div>
 
         {/* Side panel */}
@@ -258,7 +300,7 @@ function LongScriptPage() {
             hook={data.project.hook}
             profile={profile}
             busy={(act.isPending && act.variables?.action === "outline") || pilot}
-            onGenerate={(template) => act.mutate({ action: "outline", template })}
+            onGenerate={(template, chapters) => act.mutate({ action: "outline", template, chapters })}
           />
           <FactCheckPanel id={id} hasScript={Boolean(data.project.script)} />
           {act.error ? <ErrorNote error={act.error} /> : null}
@@ -282,11 +324,13 @@ function LongScriptPage() {
       <StepFooter
         data={data}
         step="script"
-        canApprove={Boolean(draft.trim()) && !streaming && !pilot}
+        canApprove={!isStory && Boolean(draft.trim()) && !streaming && !pilot}
         hint={
-          data.project.factChecks?.some((c) => c.confidence === "low" && !c.verified)
-            ? t("script.hintLowConfidence")
-            : t("script.hintApprove")
+          isStory
+            ? t("script.story.hint")
+            : data.project.factChecks?.some((c) => c.confidence === "low" && !c.verified)
+              ? t("script.hintLowConfidence")
+              : t("script.hintApprove")
         }
       />
     </div>
@@ -306,11 +350,12 @@ function OutlinePanel({
   hook: string | null;
   busy: boolean;
   profile: ChannelProfile;
-  onGenerate: (template: string) => void;
+  onGenerate: (template: string, chapters: number | "auto") => void;
 }) {
   const act = useProjectAction(id);
   const t = useT();
   const [local, setLocal] = useSyncedState<Outline | null>(outline);
+  const [chapters, setChapters] = useState<number | "auto">("auto");
   const channelTemplate = templateOf(profile);
   const templateNames = [channelTemplate.name, ...ALL_OUTLINE_TEMPLATES.map((x) => x.name).filter((n) => n !== channelTemplate.name)];
   const [template, setTemplate] = useState(channelTemplate.name);
@@ -328,7 +373,7 @@ function OutlinePanel({
         <div className="flex items-center gap-2 font-medium">
           <ListTree className="size-4 text-stone-500" /> {t("script.outline.title")}
         </div>
-        <Button size="sm" variant={outline ? "ghost" : "primary"} loading={busy} onClick={() => onGenerate(template)} icon={<Sparkles className="size-3.5" />}>
+        <Button size="sm" variant={outline ? "ghost" : "primary"} loading={busy} onClick={() => onGenerate(template, chapters)} icon={<Sparkles className="size-3.5" />}>
           {outline ? t("script.outline.regenerate") : t("script.outline.create")}
         </Button>
       </div>
@@ -341,6 +386,27 @@ function OutlinePanel({
           ))}
         </Select>
       </div>
+      {isDrama(profile) && isChapterTemplate(chosen) ? (
+        <div className="mb-3">
+          <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-stone-600">{t("script.outline.chapters")}</span>
+            <Select
+              aria-label={t("script.outline.chapters")}
+              className="h-8 flex-1 text-[13px]"
+              value={String(chapters)}
+              onChange={(e) => setChapters(e.target.value === "auto" ? "auto" : Number(e.target.value))}
+            >
+              <option value="auto">{t("script.outline.chaptersAuto")}</option>
+              {Array.from({ length: 20 }, (_, i) => i + 1).map((n) => (
+                <option key={n} value={n}>
+                  {n}
+                </option>
+              ))}
+            </Select>
+          </div>
+          <p className="mt-1 text-[11px] text-stone-500">{t("script.outline.perChapter", { len: `${lengthBudget(profile).maxMinutes} min` })}</p>
+        </div>
+      ) : null}
       {!local ? (
         <p className="text-sm text-stone-600">
           {chosen.beats.map((b) => b.name).join(" → ")}
@@ -350,6 +416,12 @@ function OutlinePanel({
         <div className="space-y-3">
           {local.sections.map((s, i) => (
             <div key={s.key}>
+              {chapterOfKey(s.key) != null && chapterOfKey(s.key) !== chapterOfKey(local.sections[i - 1]?.key ?? "") ? (
+                <div className="mb-2 mt-4 border-t border-stone-200 pt-3 text-sm font-semibold text-stone-800 first:mt-0 first:border-0 first:pt-0">
+                  {t("script.outline.chapterHeading", { n: chapterOfKey(s.key)! })}
+                  {local.chapters?.find((c) => c.n === chapterOfKey(s.key))?.title ? ` · ${local.chapters.find((c) => c.n === chapterOfKey(s.key))!.title}` : ""}
+                </div>
+              ) : null}
               <div className="mb-1 text-xs font-semibold uppercase tracking-wide text-stone-500">{s.title}</div>
               <Textarea
                 rows={Math.max(2, s.beats.length)}
@@ -512,5 +584,69 @@ function ParagraphList({
         </Card>
       ))}
     </div>
+  );
+}
+
+/** Story projects: pick chapters and turn each one into its own video project. */
+function ChaptersPanel({ data, script }: { data: ProjectData; script: string }) {
+  const t = useT();
+  const act = useProjectAction<{ created: string[]; updated: string[]; skipped: { chapter: number; reason: string }[] }>(data.project.id);
+  const chapters = splitChapters(script);
+  const videos = new Map(data.story.chapterVideos.map((v) => [v.chapter, v]));
+  const [picked, setPicked] = useState<number[]>([]);
+  const locale = data.channel.profile.language ?? "en";
+  const wpm = lengthBudget(data.channel.profile).wpm;
+  const toggle = (n: number) => setPicked((cur) => (cur.includes(n) ? cur.filter((x) => x !== n) : [...cur, n]));
+
+  function create() {
+    const approved = picked.filter((n) => videos.get(n)?.scriptApproved);
+    const force = approved.length ? confirm(t("script.story.updateApprovedConfirm", { list: approved.join(", ") })) : false;
+    act.mutate({ action: "chapterVideos", chapters: picked, force }, { onSuccess: () => setPicked([]) });
+  }
+
+  return (
+    <Card className="p-4">
+      <div className="mb-1 font-medium">{t("script.story.panelTitle")}</div>
+      <p className="mb-3 text-xs text-stone-500">{t("script.story.panelHelp")}</p>
+      <ul className="divide-y divide-stone-100">
+        {chapters.map((c) => {
+          const v = videos.get(c.n);
+          const w = wordCount(c.text, locale);
+          return (
+            <li key={c.n} className="flex flex-wrap items-center gap-3 py-2">
+              <input type="checkbox" className="size-4 accent-orange-500" checked={picked.includes(c.n)} onChange={() => toggle(c.n)} disabled={!c.text.trim()} aria-label={chapterHeader(c.n, c.title, locale)} />
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-sm font-medium">{chapterHeader(c.n, c.title, locale).replace(/^##\s*/, "")}</div>
+                <div className="text-xs text-stone-500">
+                  {w ? t("script.wordsLen", { count: w, len: `${Math.round(estimateMinutes(w, wpm) * 10) / 10} min` }) : t("script.story.empty")}
+                </div>
+              </div>
+              {v ? (
+                <>
+                  <Badge tone={v.differs ? "amber" : v.scriptApproved ? "green" : "neutral"}>
+                    {v.differs ? t("script.story.statusDiffers") : v.scriptApproved ? t("script.story.statusApproved") : t("script.story.statusCreated")}
+                  </Badge>
+                  <Link href={`/projects/${v.id}/script`} className="text-xs font-medium text-brand-ink hover:underline">
+                    {t("script.story.open")}
+                  </Link>
+                </>
+              ) : (
+                <Badge tone="neutral">{t("script.story.statusNone")}</Badge>
+              )}
+            </li>
+          );
+        })}
+      </ul>
+      <div className="mt-3 flex flex-wrap items-center gap-2">
+        <Button size="sm" variant="ghost" onClick={() => setPicked(chapters.filter((c) => c.text.trim()).map((c) => c.n))}>
+          {t("script.story.selectAll")}
+        </Button>
+        <Button size="sm" onClick={create} disabled={!picked.length} loading={act.isPending}>
+          {t("script.story.create", { count: picked.length })}
+        </Button>
+        {act.data ? <span className="text-xs text-stone-500">{t("script.story.result", { created: act.data.created.length, updated: act.data.updated.length })}</span> : null}
+      </div>
+      {act.error ? <ErrorNote error={act.error} /> : null}
+    </Card>
   );
 }

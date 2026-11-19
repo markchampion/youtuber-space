@@ -1,4 +1,4 @@
-import type { OutlineTemplate } from "./channel";
+import type { ChapterRole, OutlineBeat, OutlineTemplate } from "./channel";
 
 // Built-in video structures. "Story mystery explainer" is modelled on story-driven explainers such as
 // "What Did Ancient Humans Actually Do All Day?" (Ink Explainer): open loops, a puzzle the viewer plays,
@@ -71,26 +71,26 @@ export const OUTLINE_TEMPLATES: OutlineTemplate[] = [
   },
 ];
 
-// Narrated family drama in three chapters (~7–12 min each), modelled on Vietnamese "truyện tuổi già" story channels:
-// every chapter opens cold on shouted dialogue and closes on a cliffhanger; the CTA lands right after the first hook;
-// the arc runs humiliation → hidden secret → reversal → apology → time skip → reconciled meal → moral said out loud.
-// Keys start with c<chapter>_ so a generated outline still knows its chapters.
+// Narrated family drama, modelled on Vietnamese "truyện tuổi già" story channels. One chapter = one video (~7–12 min).
+// Beats come in three groups: the first chapter, a middle chapter (repeated as many times as the story needs) and the
+// last chapter. expandDramaTemplate turns them into c1_…cN_ keys for a story of N chapters.
+// Arc: humiliation → hidden secret → reversal → apology → time skip → reconciled meal → moral said out loud.
 export const DRAMA_OUTLINE_TEMPLATE: OutlineTemplate = {
-  name: "Family drama (3 chapters)",
+  name: "Family drama (chapters)",
   beats: [
-    { chapter: 1, key: "c1_cold_open", name: "Cold open: the shouted line", purpose: "Drop the listener into the worst moment: a shouted line of dialogue plus a sound word (Rầm!, Choang!, Cạch).", guidance: "The line that becomes the title. No narrator context yet; 4–8 short sentences of pure scene and dialogue.", share: 5 },
-    { chapter: 1, key: "c1_cast", name: "Who these people are", purpose: "The narrator greets the audience and introduces every key character by full name, age, job and the exact place they live.", guidance: "Specific places (street, district, market), a past job with years, one sensory detail per person.", share: 8 },
-    { chapter: 1, key: "c1_backstory", name: "How it came to this", purpose: "Flash back through 3–4 concrete scenes that built the injustice or the temptation, each with dialogue.", guidance: "Small physical details (rain on a tin roof, an old brown blouse, a ticking clock). Show, don't summarize.", share: 12 },
-    { chapter: 1, key: "c1_hook_cta", name: "First hook + call to action", purpose: "Escalate, hint at a hidden secret or object, then the narrator asks to like, share, comment where they listen from and subscribe, with a blessing.", guidance: "CTA in the channel's address form (e.g. 'quý cô bác'), warm, one paragraph. End on a forward hook ('Họ không hề biết rằng…').", share: 8 },
-    { chapter: 2, key: "c2_cold_open", name: "Cold open: the fallout", purpose: "Open again on dialogue and a sound: the consequences hit (gossip, a child hurt, a relative calling).", guidance: "Raise the stakes for the most sympathetic character.", share: 6 },
-    { chapter: 2, key: "c2_ally", name: "Who stands by them", purpose: "A kind ally (daughter, old friend, neighbour) acts; a warm, concrete scene that contrasts with the cruelty.", guidance: "Food, a meal, a small gesture the listener can picture.", share: 9 },
-    { chapter: 2, key: "c2_reveal", name: "The secret comes out", purpose: "The hidden asset or secret is revealed in a family scene, with precise figures (land, savings, a letter, a notebook).", guidance: "Money as exact amounts in words. Let the elder speak with dignity, not revenge.", share: 14 },
-    { chapter: 2, key: "c2_cliffhanger", name: "Cliffhanger", purpose: "A new blow arrives just as things seem settled (a letter, a phone call, a visitor at the gate).", guidance: "End mid-shock on one short line.", share: 6 },
-    { chapter: 3, key: "c3_cold_open", name: "Cold open: the truth", purpose: "Open on a demand or confession in dialogue; the guilty side explains themselves.", guidance: "Give the antagonist a human reason; keep it fair.", share: 8 },
-    { chapter: 3, key: "c3_reversal", name: "Tables turn", purpose: "The family acts: sacrifices, refusals or help that show who each person really is; the wrongdoer feels the consequence.", guidance: "Concrete acts and amounts. The proud one is humbled by kindness, not humiliation.", share: 12 },
-    { chapter: 3, key: "c3_apology", name: "Apology", purpose: "Kneeling, tears, a symbolic object returned or replaced; forgiveness with conditions.", guidance: "Short lines. Let silence and one gesture carry it.", share: 5 },
-    { chapter: 3, key: "c3_time_skip", name: "One year later", purpose: "A reconciled family meal; callback to an object or line from the cold open.", guidance: "Warm sensory close; show change through small details.", share: 4 },
-    { chapter: 3, key: "c3_moral_cta", name: "Moral + closing CTA", purpose: "The narrator states 2–4 plain lessons (including one practical one, e.g. keep the right to live in the house, keep savings for old age), then asks for likes, comments and subscriptions and blesses the audience.", guidance: "Numbered lessons in simple words; end with a blessing and 'see you in the next story'.", share: 3 },
+    { role: "first", key: "cold_open", name: "Cold open: the shouted line", purpose: "Drop the listener into the worst moment: a shouted line of dialogue plus a sound word (Rầm!, Choang!, Cạch).", guidance: "The line that becomes the title. No narrator context yet; 4–8 short sentences of pure scene and dialogue.", share: 15 },
+    { role: "first", key: "cast", name: "Who these people are", purpose: "The narrator greets the audience and introduces every key character by full name, age, job and the exact place they live.", guidance: "Specific places (street, district, market), a past job with years, one sensory detail per person.", share: 25 },
+    { role: "first", key: "backstory", name: "How it came to this", purpose: "Flash back through 3–4 concrete scenes that built the injustice or the temptation, each with dialogue.", guidance: "Small physical details (rain on a tin roof, an old brown blouse, a ticking clock). Show, don't summarize.", share: 35 },
+    { role: "first", key: "hook_cta", name: "First hook + call to action", purpose: "Escalate, hint at a hidden secret or object, then the narrator asks to like, share, comment where they listen from and subscribe, with a blessing.", guidance: "CTA in the channel's address form (e.g. 'quý cô bác'), warm, one paragraph. End on a forward hook ('Họ không hề biết rằng…').", share: 25 },
+    { role: "middle", key: "cold_open", name: "Cold open: the next blow", purpose: "Open again on dialogue and a sound: a new consequence or confrontation hits (gossip, a child hurt, a relative calling, a demand).", guidance: "Raise the stakes for the most sympathetic character.", share: 20 },
+    { role: "middle", key: "turn", name: "Allies and pressure", purpose: "Someone stands by them or turns against them; a warm or painful concrete scene that moves the plot one step.", guidance: "Food, a meal, a small gesture or a hard word the listener can picture.", share: 30 },
+    { role: "middle", key: "reveal", name: "Something comes out", purpose: "A secret, an asset, a debt or a past mistake is revealed in a family scene, with precise figures.", guidance: "Money as exact amounts in words. Let the elder speak with dignity, not revenge.", share: 35 },
+    { role: "middle", key: "cliffhanger", name: "Cliffhanger", purpose: "A new blow arrives just as things seem settled (a letter, a phone call, a visitor at the gate).", guidance: "End mid-shock on one short line.", share: 15 },
+    { role: "last", key: "cold_open", name: "Cold open: the truth", purpose: "Open on a demand or confession in dialogue; the guilty side explains themselves.", guidance: "Give the antagonist a human reason; keep it fair.", share: 25 },
+    { role: "last", key: "reversal", name: "Tables turn", purpose: "The family acts: sacrifices, refusals or help that show who each person really is; the wrongdoer feels the consequence.", guidance: "Concrete acts and amounts. The proud one is humbled by kindness, not humiliation.", share: 35 },
+    { role: "last", key: "apology", name: "Apology", purpose: "Kneeling, tears, a symbolic object returned or replaced; forgiveness with conditions.", guidance: "Short lines. Let silence and one gesture carry it.", share: 15 },
+    { role: "last", key: "time_skip", name: "One year later", purpose: "A reconciled family meal; callback to an object or line from the cold open.", guidance: "Warm sensory close; show change through small details.", share: 12 },
+    { role: "last", key: "moral_cta", name: "Moral + closing CTA", purpose: "The narrator states 2–4 plain lessons (including one practical one, e.g. keep the right to live in the house, keep savings for old age), then asks for likes, comments and subscriptions and blesses the audience.", guidance: "Numbered lessons in simple words; end with a blessing and 'see you in the next story'.", share: 13 },
   ],
 };
 
@@ -104,8 +104,49 @@ export function defaultTemplateFor(genre: "explainer" | "drama"): OutlineTemplat
   return genre === "drama" ? DRAMA_OUTLINE_TEMPLATE : DEFAULT_OUTLINE_TEMPLATE;
 }
 
+/** A template whose beats are grouped into first / middle / last chapters. */
+export function isChapterTemplate(t: OutlineTemplate): boolean {
+  return t.beats.some((b) => b.role);
+}
+
+/** Beats of one chapter role. Beats without a role count as middle beats. */
+export function beatsOfRole(t: OutlineTemplate, role: ChapterRole): OutlineBeat[] {
+  return t.beats.filter((b) => (b.role ?? "middle") === role);
+}
+
+/** Which beat group chapter n of a story with `count` chapters uses. */
+export function roleOfChapter(n: number, count: number): ChapterRole {
+  return n === 1 ? "first" : n === count ? "last" : "middle";
+}
+
+/**
+ * A chapter template for a story of `count` chapters: chapter 1 = first beats, 2..count-1 = middle beats, count = last beats,
+ * with keys prefixed c<n>_ (so a generated outline still knows its chapters). A one-chapter story gets first + last.
+ */
+export function expandDramaTemplate(t: OutlineTemplate, count: number): OutlineTemplate {
+  if (!isChapterTemplate(t)) return t;
+  const n = Math.max(1, Math.round(count));
+  const beats: OutlineBeat[] = [];
+  for (let ch = 1; ch <= n; ch++) {
+    const roles: ChapterRole[] = n === 1 ? ["first", "last"] : [roleOfChapter(ch, n)];
+    for (const role of roles) {
+      for (const b of beatsOfRole(t, role)) beats.push({ ...b, key: `c${ch}_${b.key}`, name: `${ch}. ${b.name}` });
+    }
+  }
+  return { name: `${t.name} × ${n}`, beats };
+}
+
 /** Chapter of an outline section, from its key ("c2_reveal" → 2), or null when the outline has no chapters. */
 export function chapterOfKey(key: string): number | null {
   const m = /^c(\d+)_/.exec(key);
   return m ? Number(m[1]) : null;
+}
+
+/** The template beat an outline section key came from ("c3_reveal" → the "reveal" beat of that chapter's role). */
+export function beatOfKey(t: OutlineTemplate, key: string, count: number): OutlineBeat | undefined {
+  const ch = chapterOfKey(key);
+  if (ch == null) return t.beats.find((b) => b.key === key);
+  const base = key.replace(/^c\d+_/, "");
+  const roles: ChapterRole[] = count === 1 ? ["first", "last"] : [roleOfChapter(ch, count)];
+  return t.beats.find((b) => roles.includes(b.role ?? "middle") && b.key === base);
 }

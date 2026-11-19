@@ -38,6 +38,14 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
               {t("nav.links.videos")}
             </Link>
             <span>/</span>
+            {data.story?.parent ? (
+              <>
+                <Link href={`/projects/${data.story.parent.id}/script`} className="truncate hover:text-stone-800">
+                  {t("nav.project.partOf", { n: data.story.parent.chapter ?? "?", story: data.story.parent.title })}
+                </Link>
+                <span>/</span>
+              </>
+            ) : null}
             {angle !== "—" ? <Badge tone="brand">{angle}</Badge> : null}
           </div>
           <h1 className="mt-1 truncate text-xl font-semibold tracking-tight">{project.title}</h1>
@@ -56,12 +64,12 @@ export default function ProjectLayout({ children }: { children: React.ReactNode 
         </div>
       </div>
 
-      <AutopilotBar data={data} />
+      {data.story?.isStory ? null : <AutopilotBar data={data} />}
 
       <div className="flex flex-1 flex-col gap-6 py-6 lg:flex-row">
         <nav aria-label={t("nav.project.pipelineSteps")} className="lg:w-52 lg:shrink-0">
           <ol className="flex gap-1 overflow-x-auto lg:sticky lg:top-20 lg:flex-col">
-            {stepsFor(channel.kind, project.voiceMode).map((s, i) => {
+            {stepsFor(channel.kind, project.voiceMode, data.story?.isStory).map((s, i) => {
               const href = `/projects/${id}/${s.path}`;
               const active = path.startsWith(href);
               const approved = Boolean(project.approvals[s.key]);

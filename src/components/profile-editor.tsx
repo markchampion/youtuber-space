@@ -64,7 +64,7 @@ export function ProfileEditor({ value: p, onChange }: Props) {
             <Input value={p.name} onChange={(e) => set("name", e.target.value)} />
           </div>
           <div>
-            <Label hint={t("channel.profile.essentials.minutes")}>{t("channel.profile.essentials.videoLength")}</Label>
+            <Label hint={t("channel.profile.essentials.minutes")}>{t(genreOf(p) === "drama" ? "channel.profile.essentials.videoLengthDrama" : "channel.profile.essentials.videoLength")}</Label>
             <div className="flex items-center gap-1.5">
               <Input
                 type="number"

@@ -92,6 +92,13 @@
       "when": 1795092019870,
       "tag": "0012_local_voice",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "6",
+      "when": 1795101647255,
+      "tag": "0013_story_chapters",
+      "breakpoints": true
     }
   ]
 }

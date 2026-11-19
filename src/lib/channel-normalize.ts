@@ -1,6 +1,6 @@
 import type { AutoStep, ChannelProfile, LegacyFields, ProfileV1 } from "./channel";
 import { FONT_OPTIONS, getLanguage } from "./languages";
-import { AUTO_STEPS, DEFAULT_LENGTH, autopilotOf, genreOf, pacingOf } from "./channel";
+import { AUTO_STEPS, CHAPTER_ROLES, DEFAULT_LENGTH, autopilotOf, genreOf, pacingOf } from "./channel";
 import { DEFAULT_OUTLINE_TEMPLATE, defaultTemplateFor } from "./outline-templates";
 
 const HEX = /^#[0-9a-f]{6}$/i;
@@ -101,7 +101,7 @@ export function normalizeProfile(input: ChannelProfile | ProfileV1): ChannelProf
           ...b,
           key: slugKey(b.key || b.name) || `beat_${i + 1}`,
           share: clamp(Math.round(b.share) || 5, 1, 60),
-          chapter: b.chapter && Number.isInteger(b.chapter) && b.chapter > 0 ? b.chapter : undefined,
+          role: b.role && CHAPTER_ROLES.includes(b.role) ? b.role : undefined,
         })),
     },
     topicAngles,

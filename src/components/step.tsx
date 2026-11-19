@@ -82,7 +82,7 @@ export function StepFooter({
   const t = useT();
   const act = useProjectAction(data.project.id);
   const router = useRouter();
-  const steps = stepsFor(data.channel.kind, data.project.voiceMode);
+  const steps = stepsFor(data.channel.kind, data.project.voiceMode, data.story?.isStory);
   const i = steps.findIndex((s) => s.key === step);
   const next = steps[i + 1];
   const approved = Boolean(data.project.approvals[step]) && !data.project.stale[step];
