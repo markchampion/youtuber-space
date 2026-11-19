@@ -71,4 +71,41 @@ export const OUTLINE_TEMPLATES: OutlineTemplate[] = [
   },
 ];
 
+// Narrated family drama in three chapters (~7–12 min each), modelled on Vietnamese "truyện tuổi già" story channels:
+// every chapter opens cold on shouted dialogue and closes on a cliffhanger; the CTA lands right after the first hook;
+// the arc runs humiliation → hidden secret → reversal → apology → time skip → reconciled meal → moral said out loud.
+// Keys start with c<chapter>_ so a generated outline still knows its chapters.
+export const DRAMA_OUTLINE_TEMPLATE: OutlineTemplate = {
+  name: "Family drama (3 chapters)",
+  beats: [
+    { chapter: 1, key: "c1_cold_open", name: "Cold open: the shouted line", purpose: "Drop the listener into the worst moment: a shouted line of dialogue plus a sound word (Rầm!, Choang!, Cạch).", guidance: "The line that becomes the title. No narrator context yet; 4–8 short sentences of pure scene and dialogue.", share: 5 },
+    { chapter: 1, key: "c1_cast", name: "Who these people are", purpose: "The narrator greets the audience and introduces every key character by full name, age, job and the exact place they live.", guidance: "Specific places (street, district, market), a past job with years, one sensory detail per person.", share: 8 },
+    { chapter: 1, key: "c1_backstory", name: "How it came to this", purpose: "Flash back through 3–4 concrete scenes that built the injustice or the temptation, each with dialogue.", guidance: "Small physical details (rain on a tin roof, an old brown blouse, a ticking clock). Show, don't summarize.", share: 12 },
+    { chapter: 1, key: "c1_hook_cta", name: "First hook + call to action", purpose: "Escalate, hint at a hidden secret or object, then the narrator asks to like, share, comment where they listen from and subscribe, with a blessing.", guidance: "CTA in the channel's address form (e.g. 'quý cô bác'), warm, one paragraph. End on a forward hook ('Họ không hề biết rằng…').", share: 8 },
+    { chapter: 2, key: "c2_cold_open", name: "Cold open: the fallout", purpose: "Open again on dialogue and a sound: the consequences hit (gossip, a child hurt, a relative calling).", guidance: "Raise the stakes for the most sympathetic character.", share: 6 },
+    { chapter: 2, key: "c2_ally", name: "Who stands by them", purpose: "A kind ally (daughter, old friend, neighbour) acts; a warm, concrete scene that contrasts with the cruelty.", guidance: "Food, a meal, a small gesture the listener can picture.", share: 9 },
+    { chapter: 2, key: "c2_reveal", name: "The secret comes out", purpose: "The hidden asset or secret is revealed in a family scene, with precise figures (land, savings, a letter, a notebook).", guidance: "Money as exact amounts in words. Let the elder speak with dignity, not revenge.", share: 14 },
+    { chapter: 2, key: "c2_cliffhanger", name: "Cliffhanger", purpose: "A new blow arrives just as things seem settled (a letter, a phone call, a visitor at the gate).", guidance: "End mid-shock on one short line.", share: 6 },
+    { chapter: 3, key: "c3_cold_open", name: "Cold open: the truth", purpose: "Open on a demand or confession in dialogue; the guilty side explains themselves.", guidance: "Give the antagonist a human reason; keep it fair.", share: 8 },
+    { chapter: 3, key: "c3_reversal", name: "Tables turn", purpose: "The family acts: sacrifices, refusals or help that show who each person really is; the wrongdoer feels the consequence.", guidance: "Concrete acts and amounts. The proud one is humbled by kindness, not humiliation.", share: 12 },
+    { chapter: 3, key: "c3_apology", name: "Apology", purpose: "Kneeling, tears, a symbolic object returned or replaced; forgiveness with conditions.", guidance: "Short lines. Let silence and one gesture carry it.", share: 5 },
+    { chapter: 3, key: "c3_time_skip", name: "One year later", purpose: "A reconciled family meal; callback to an object or line from the cold open.", guidance: "Warm sensory close; show change through small details.", share: 4 },
+    { chapter: 3, key: "c3_moral_cta", name: "Moral + closing CTA", purpose: "The narrator states 2–4 plain lessons (including one practical one, e.g. keep the right to live in the house, keep savings for old age), then asks for likes, comments and subscriptions and blesses the audience.", guidance: "Numbered lessons in simple words; end with a blessing and 'see you in the next story'.", share: 3 },
+  ],
+};
+
 export const DEFAULT_OUTLINE_TEMPLATE = OUTLINE_TEMPLATES[0];
+
+/** Every built-in template, for the template picker. */
+export const ALL_OUTLINE_TEMPLATES: OutlineTemplate[] = [...OUTLINE_TEMPLATES, DRAMA_OUTLINE_TEMPLATE];
+
+/** The structure a channel starts from when it hasn't set its own. */
+export function defaultTemplateFor(genre: "explainer" | "drama"): OutlineTemplate {
+  return genre === "drama" ? DRAMA_OUTLINE_TEMPLATE : DEFAULT_OUTLINE_TEMPLATE;
+}
+
+/** Chapter of an outline section, from its key ("c2_reveal" → 2), or null when the outline has no chapters. */
+export function chapterOfKey(key: string): number | null {
+  const m = /^c(\d+)_/.exec(key);
+  return m ? Number(m[1]) : null;
+}

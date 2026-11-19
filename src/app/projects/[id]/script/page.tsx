@@ -9,7 +9,7 @@ import { AdScriptEditor } from "@/components/ad-script-editor";
 import { api, autopilotRunning, useProject, useProjectAction, type ProjectData } from "@/lib/client";
 import { estimateMinutes, longSentences, splitParagraphs, splitSentences, wordCount } from "@/lib/sync";
 import { lengthBudget, needsTrim, pacingOf, type ChannelProfile } from "@/lib/channel";
-import { OUTLINE_TEMPLATES } from "@/lib/outline-templates";
+import { ALL_OUTLINE_TEMPLATES } from "@/lib/outline-templates";
 import { templateOf } from "@/lib/ai/prompts";
 import type { Outline } from "@/lib/types";
 import { StaleBanner, StepFooter, StepHeader } from "@/components/step";
@@ -312,9 +312,9 @@ function OutlinePanel({
   const t = useT();
   const [local, setLocal] = useSyncedState<Outline | null>(outline);
   const channelTemplate = templateOf(profile);
-  const templateNames = [channelTemplate.name, ...OUTLINE_TEMPLATES.map((x) => x.name).filter((n) => n !== channelTemplate.name)];
+  const templateNames = [channelTemplate.name, ...ALL_OUTLINE_TEMPLATES.map((x) => x.name).filter((n) => n !== channelTemplate.name)];
   const [template, setTemplate] = useState(channelTemplate.name);
-  const chosen = template === channelTemplate.name ? channelTemplate : OUTLINE_TEMPLATES.find((x) => x.name === template) ?? channelTemplate;
+  const chosen = template === channelTemplate.name ? channelTemplate : ALL_OUTLINE_TEMPLATES.find((x) => x.name === template) ?? channelTemplate;
 
   function edit(i: number, beats: string) {
     if (!local) return;

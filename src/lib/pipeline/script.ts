@@ -4,10 +4,11 @@ import { nanoid } from "nanoid";
 import { db, schema } from "@/lib/db";
 import { env } from "@/lib/env";
 import { claudeJSON, claudeText } from "@/lib/ai/claude";
-import { channelBrief, factCheckPrompt, outlinePrompt, polishPrompt, rewriteParagraphPrompt, scriptPrompt, shortenPrompt, templateOf, trimPrompt } from "@/lib/ai/prompts";
-import { OUTLINE_TEMPLATES } from "@/lib/outline-templates";
+import { channelBrief, continuityPrompt, factCheckPrompt, outlinePrompt, polishPrompt, rewriteParagraphPrompt, scriptChapterPrompt, scriptPrompt, shortenPrompt, templateOf, trimPrompt } from "@/lib/ai/prompts";
+import { ALL_OUTLINE_TEMPLATES, chapterOfKey } from "@/lib/outline-templates";
 import type { ChannelProfile, OutlineTemplate } from "@/lib/channel";
-import { lengthBudget, needsTrim, polishEnabled } from "@/lib/channel";
+import { isDrama, lengthBudget, needsTrim, polishEnabled } from "@/lib/channel";
+import { spellOutNumbers } from "@/lib/spell-numbers";
 import { FactCheckSchema, OutlineSchema, type FactCheck, type Outline } from "@/lib/types";
 import { acceptPolish, splitParagraphs, splitSentences, wordCount } from "@/lib/sync";
 import { getVersion, recordVersion, snapshotCurrent } from "./history";
@@ -43,7 +44,7 @@ Tomorrow morning, an alarm will pull you out of sleep. You wake up when the alar
 export function resolveTemplate(profile: ChannelProfile, name?: string | null): OutlineTemplate {
   const own = templateOf(profile);
   if (!name || name === own.name) return own;
-  return OUTLINE_TEMPLATES.find((t) => t.name === name) ?? own;
+  return ALL_OUTLINE_TEMPLATES.find((t) => t.name === name) ?? own;
 }
 
 export async function generateOutline(projectId: string, templateName?: string | null) {
@@ -83,6 +84,8 @@ export async function generateScript(projectId: string, onText: (d: string) => v
       await new Promise((r) => setTimeout(r, 8));
     }
     script = DRY_SCRIPT;
+  } else if (isDrama(channel.profile) && outlineChapters(p.outline).length > 1) {
+    script = await writeByChapter(projectId, channel.profile, p.title, p.outline, onText);
   } else {
     script = await claudeText({
       system: channelBrief(channel.profile),
@@ -94,6 +97,8 @@ export async function generateScript(projectId: string, onText: (d: string) => v
       onText,
     });
   }
+  // Drama scripts are read by TTS: any digits the model slipped in become words (captions then match the voice).
+  if (isDrama(channel.profile)) script = spellOutNumbers(script, channel.profile.language);
   saveScript(projectId, script, "ai");
   if (polishEnabled(channel.profile)) {
     // Tell the client a second pass is starting; it replaces the text it shows.
@@ -106,6 +111,32 @@ export async function generateScript(projectId: string, onText: (d: string) => v
     script = (await rewriteWholeScript(projectId, "trim", onText)).script;
   }
   return script;
+}
+
+/** Chapter numbers found in an outline's section keys (c1_…, c2_…), in order. Empty when the outline has no chapters. */
+export function outlineChapters(outline: Outline): number[] {
+  const nums = outline.sections.map((s) => chapterOfKey(s.key)).filter((n): n is number => n != null);
+  return [...new Set(nums)].sort((a, b) => a - b);
+}
+
+/** One AI call per chapter; each sees the outline, the story bible and everything written before it. */
+async function writeByChapter(projectId: string, profile: ChannelProfile, title: string, outline: Outline, onText: (d: string) => void) {
+  const chapters = outlineChapters(outline);
+  let story = "";
+  for (const [i, ch] of chapters.entries()) {
+    if (i > 0) onText("\n\n");
+    const text = await claudeText({
+      system: channelBrief(profile),
+      user: scriptChapterPrompt(profile, title, outline, ch, chapters.length, story),
+      effort: "high",
+      maxTokens: 32000,
+      kind: "script",
+      projectId,
+      onText,
+    });
+    story = story ? `${story.trim()}\n\n${text.trim()}` : text.trim();
+  }
+  return story;
 }
 
 /** Stream marker between the first draft and the natural-speech pass. */
@@ -194,6 +225,7 @@ export async function rewriteParagraph(projectId: string, paragraph: string, ins
 export async function factCheck(projectId: string) {
   const p = getProject(projectId);
   if (!p.script) throw new Error("No script yet");
+  const drama = isDrama(getChannel(p.channelId).profile);
   const checks: FactCheck[] = env.dryRun
     ? [
         { name: "Richard Lee", claim: "Lived with the Ju/'hoansi in the 1960s", confidence: "high", note: "Well documented." },
@@ -201,8 +233,8 @@ export async function factCheck(projectId: string) {
       ]
     : (
         await claudeJSON(FactCheckSchema, {
-          system: "You are a meticulous fact-checker for educational history videos.",
-          user: factCheckPrompt(p.script),
+          system: drama ? "You are a meticulous continuity editor for long narrated fiction." : "You are a meticulous fact-checker for educational history videos.",
+          user: drama ? continuityPrompt(p.script, p.outline?.evidence ?? []) : factCheckPrompt(p.script),
           effort: "high",
           kind: "fact_check",
           projectId,
