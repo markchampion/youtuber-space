@@ -29,3 +29,24 @@ describe("thumbnail prompt", () => {
     expect(prompt).toContain("16:9");
   });
 });
+
+describe("drama thumbnail prompt", () => {
+  const drama = normalizeProfile({ ...ANCIENT_HUMANS_PROFILE, genre: "drama", language: "vi" });
+  const concept = 'The father-in-law points at the camera; the daughter-in-law cries. Tag "U80". Headline "CON DÂU LỠ" / "THƯƠNG EM CHỒNG!". Banner "CHUYỆN KHÓ TIN".';
+
+  it("uses the stacked drama layout and a photo-real look instead of the channel's art style", () => {
+    const prompt = thumbnailPrompt(drama, "Con dâu lỡ thương em chồng", concept);
+    expect(prompt).toContain("CON DÂU LỠ");
+    expect(prompt).toMatch(/red rounded badge/);
+    expect(prompt).toMatch(/line 1 bright yellow and line 2 bright red/);
+    expect(prompt).toMatch(/slanted bright blue ribbon/);
+    expect(prompt).not.toContain(drama.visual.styleAnchor);
+  });
+
+  it("asks drama metadata for tag, two-line headline and banner", async () => {
+    const { metadataPrompt } = await import("./index");
+    const text = metadataPrompt(drama, "Con dâu lỡ thương em chồng", "script");
+    expect(text).toContain('Tag "…". Headline "…" / "…". Banner "…".');
+    expect(metadataPrompt(p, title, "script")).not.toContain("Banner");
+  });
+});

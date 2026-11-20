@@ -2,6 +2,7 @@ import "server-only";
 import path from "node:path";
 import fs from "node:fs";
 import { env } from "@/lib/env";
+import { isDrama } from "@/lib/channel";
 import { claudeJSON } from "@/lib/ai/claude";
 import { channelBrief, metadataPrompt } from "@/lib/ai/prompts";
 import { showsMainCharacter, thumbnailPrompt } from "@/lib/ai/prompts/thumbnail";
@@ -21,9 +22,13 @@ export async function generateMetadata(projectId: string) {
         titles: [p.title, `${p.title} (Explained)`, `The Truth About ${p.title}`],
         description: `DRY_RUN description for ${p.title}.\n\n#ancienthumans #history`,
         tags: ["ancient humans", "human evolution", "prehistory", "anthropology"],
-        thumbnailIdeas: [
-          `The mysterious subject of "${p.title}" glowing in the dark, half hidden by fog. Mood: mystery. Text "${p.title.split(" ").slice(0, 3).join(" ").toUpperCase()}?" top left.`,
-        ],
+        thumbnailIdeas: isDrama(channel.profile)
+          ? [
+              'The 78-year-old father-in-law in a brown cardigan shouts and points at the camera in the foreground right; the daughter-in-law cries with her head bowed behind him; her husband stares in shock in the background. A broken bowl lies on the floor. Tag "U80". Headline "CON DÂU LỠ" / "THƯƠNG EM CHỒNG!". Banner "CHUYỆN KHÓ TIN".',
+            ]
+          : [
+              `The mysterious subject of "${p.title}" glowing in the dark, half hidden by fog. Mood: mystery. Text "${p.title.split(" ").slice(0, 3).join(" ").toUpperCase()}?" top left.`,
+            ],
       }
     : await claudeJSON(MetadataSchema, {
         system: channelBrief(channel.profile),

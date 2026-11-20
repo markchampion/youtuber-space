@@ -1,4 +1,4 @@
-import type { ChannelProfile } from "@/lib/channel";
+import { isDrama, type ChannelProfile } from "@/lib/channel";
 import { artLock } from "./channel-art";
 
 /** Concepts only include the main character when a human reaction helps (see metadataPrompt). */
@@ -11,6 +11,7 @@ export function showsMainCharacter(concept: string) {
  * channel's character; the character is described only when the concept puts them in the frame.
  */
 export function thumbnailPrompt(p: ChannelProfile, title: string, concept: string) {
+  if (isDrama(p)) return dramaThumbnailPrompt(title, concept);
   const v = p.visual;
   return [
     v.styleAnchor,
@@ -26,4 +27,21 @@ export function thumbnailPrompt(p: ChannelProfile, title: string, concept: strin
   ]
     .filter(Boolean)
     .join(" ");
+}
+
+/**
+ * Family-drama channels: the format those channels use in the feed. It looks like a still from a
+ * TV drama, not like the channel's illustrated scenes, with a stacked text block (red tag, a
+ * yellow and red headline, a blue banner) on the left and the characters' conflict on the right.
+ */
+function dramaThumbnailPrompt(title: string, concept: string) {
+  return [
+    `YouTube thumbnail for a Vietnamese family-drama story video titled "${title.trim()}".`,
+    "Hyper-realistic cinematic photo, like a still from a Vietnamese TV drama: real Vietnamese people with natural skin texture, tears and wrinkles, sharp focus on the faces, rich saturated warm colors, strong contrast, a dim lived-in Vietnamese home behind them with soft background blur.",
+    `Concept: ${concept.trim().replace(/\.$/, "")}.`,
+    "Layout: the left ~45% of the frame is the text block and the right ~55% holds the characters. Faces are big (each face at least a fifth of the frame height), with emotions pushed to the extreme so they read on a small phone screen; the nearest character is closest to the camera on the far right. The characters never cover the text.",
+    'Text block, stacked and left-aligned, top to bottom: the Tag in white on a small red rounded badge with a white outline; the Headline as two giant lines of heavy condensed sans-serif capitals (like Impact), line 1 bright yellow and line 2 bright red, each with a thick black outline and a drop shadow, as wide as the text block; the Banner in white italic capitals on a slanted bright blue ribbon under the headline. If the concept gives only one line of text, use it as the headline and leave out the rest.',
+    "Write only the words the concept gives, spelled exactly, with every Vietnamese accent mark correct. No other words, logos, watermarks or subtitles.",
+    "Everyone fully clothed. No distorted hands, no extra fingers, no Western faces. 16:9 widescreen.",
+  ].join(" ");
 }

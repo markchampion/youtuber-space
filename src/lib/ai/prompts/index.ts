@@ -472,6 +472,20 @@ ${textFrames ? "For concept_text frames the image is not generated at all — on
 description (always in English, for the image model): concrete and specific — who is in the frame (for every person, name which character or variant it is and restate their defining look from the channel's character description), their exact expression and action, the objects, and composition. Keep the important content in the middle of the frame. Do NOT include style words (the style is added automatically) and do NOT describe any text, letters or labels.`;
 }
 
+/** Drama channels use the Vietnamese family-drama thumbnail format: a stacked text block on the left, the conflict on the right. */
+function dramaThumbnailConcepts(title: string) {
+  return `Thumbnail concepts (3–4 sentences each) in the proven family-drama thumbnail format, built for a high click-through rate:
+- The text block fills the left ~45% of the frame, stacked in three tiers, all in the channel's language and ALL CAPS:
+  - Tag: 1–2 words on a small red badge at the top: one sharp detail that makes the story specific (an age like "U80", a role like "MẸ CHỒNG", a time like "30 NĂM").
+  - Headline: 2 short lines of 2–4 words each, the story's shocking core in plain words (who did what to whom), taken from the title "${title}" but punchier. It may end with "!" or "?". Never give away the ending.
+  - Banner: 2–4 words on a slanted blue banner under the headline, a curiosity tag such as "CHUYỆN KHÓ TIN" or "KẾT CỤC BẤT NGỜ".
+  Write the text exactly in this form: Tag "…". Headline "…" / "…". Banner "…".
+- The right ~55% shows 2–3 characters of the story at the peak of the title's main conflict, waist-up and close, faces big and sharp, each with a different extreme emotion. For example: in the foreground the accuser shouting and pointing straight at the camera; in the middle the accused crying with head bowed; in the background a third person frozen in shock. Name each one by role and age (e.g. "the 78-year-old father-in-law"), say what they wear, and give one story prop (a broken bowl on the floor, an old notebook in a hand).
+- The setting is a dim, lived-in Vietnamese family home with one warm lamp and night outside, so the faces stand out.
+- Show the confrontation, never intimacy: an affair is shown at the moment it is discovered, fully clothed.
+- Make the 3 concepts clearly different: a different confrontation, who accuses whom, and props.`;
+}
+
 export function metadataPrompt(p: ChannelProfile, title: string, script: string) {
   return `Create YouTube metadata for the video "${title}".
 
@@ -482,14 +496,14 @@ ${script.slice(0, 20000)}
 Rules: ${p.metadataRules}
 Provide 3 alternative titles (best first), the full description as plain text with the hashtag line at the end, 25–40 tags (plain keywords, no #), and 3 thumbnail concepts.
 
-Thumbnail concepts (2–3 sentences each), built for a high click-through rate:
+${isDrama(p) ? dramaThumbnailConcepts(title) : `Thumbnail concepts (2–3 sentences each), built for a high click-through rate:
 - Every concept shows what the title "${title}" promises. The thumbnail and title sit side by side in the feed and must read as one idea: someone who sees only the image should be able to guess what the video is about. Use the script only for concrete, accurate details of that subject, never to switch to a side story or a minor moment.
 - Open each concept with a sentence naming the title's subject as the hero of the image (a video titled "Why the UFO Came Back" shows the UFO returning). Not a generic picture of the channel's topic.
 - One focal point, big and instantly readable on a phone. Show the title's subject at its most intriguing, or the question the title asks, without giving the answer away.
 - Give it the emotional vibe that fits the story, and name it: mystery (darkness, fog, a single eerie light source, silhouettes, something half hidden), danger, awe, shock or curiosity. Describe the lighting and colors that create it (dramatic contrast, a bright subject against a dark background).
 - The channel's main character only appears when a human reaction makes it stronger (for example small in the corner, looking up in shock). Then call them "the main character" and describe only their pose and expression, never their look. Most concepts should not need them.
 - End with 2–4 words of thumbnail text that build on the title's question or claim with a curiosity hook, without repeating it word for word (e.g. "IT CAME BACK", "NOBODY EXPLAINED"), in the channel's language, and say where the text goes (in an empty area away from the subject).
-- Make the 3 concepts clearly different: different angles on the title's subject, not three versions of one image.`;
+- Make the 3 concepts clearly different: different angles on the title's subject, not three versions of one image.`}`;
 }
 
 export function shortsPrompt(numbered: string, count: number) {
