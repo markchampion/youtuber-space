@@ -1,6 +1,7 @@
 import "server-only";
 import fs from "node:fs";
 import path from "node:path";
+import { spawn } from "node:child_process";
 import sharp from "sharp";
 import { DATA_DIR } from "@/lib/paths";
 
@@ -93,4 +94,23 @@ export function warmPreview(rel: string, kind: "image" | "audio", widths = [480,
   const file = absPath(rel);
   const jobs = kind === "image" ? widths.map((w) => ensurePreviewImage(file, w)) : [ensurePreviewAudio(file)];
   Promise.all(jobs).catch((e) => console.warn(`Preview warm-up failed for ${rel}:`, e));
+}
+
+/**
+ * Show a media file in the computer's file manager (Finder on a Mac, with the file selected).
+ * The app runs on the user's own machine, so this opens a window on their desktop.
+ */
+export function revealInFileManager(rel: string) {
+  const file = absPath(rel);
+  if (!fs.existsSync(file)) throw new Error("That file no longer exists.");
+  const [cmd, args] =
+    process.platform === "darwin"
+      ? ["open", ["-R", file]]
+      : process.platform === "win32"
+        ? ["explorer.exe", [`/select,${file}`]]
+        : ["xdg-open", [path.dirname(file)]];
+  // Detached: the window stays open after the request ends. Errors (no file manager) are ignored.
+  const child = spawn(cmd, args, { detached: true, stdio: "ignore" });
+  child.on("error", () => {});
+  child.unref();
 }

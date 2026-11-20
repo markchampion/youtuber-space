@@ -2,7 +2,7 @@ import fs from "node:fs";
 import { eq } from "drizzle-orm";
 import { db, schema } from "@/lib/db";
 import { baseUrlOf, handler } from "@/lib/api";
-import { absPath, mediaUrl, projectRel } from "@/lib/media";
+import { absPath, mediaUrl, projectRel, revealInFileManager } from "@/lib/media";
 import { projectCliCalls, projectCost } from "@/lib/costs";
 import { modelFor } from "@/lib/env";
 import { CLAUDE_STEPS } from "@/lib/claude-models";
@@ -236,6 +236,12 @@ export const POST = handler(async (req: Request, ctx: Ctx) => {
     case "setTiming":
       setTiming(id, { visualLeadMs: b.visualLeadMs, playbackRate: b.playbackRate });
       return ok();
+    case "revealRender": {
+      const rel = getProject(id).renderPath;
+      if (!rel) throw new Error("Render the video first.");
+      revealInFileManager(rel);
+      return ok();
+    }
     case "render":
       return ok({ jobId: startRenderJob(id, { showCaptions: Boolean(b.showCaptions), kenBurns: b.kenBurns !== false, baseUrl: baseUrlOf(req) }) });
 

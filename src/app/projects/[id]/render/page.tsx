@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, type RefObject } from "react";
 import { useParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { Player, type PlayerRef } from "@remotion/player";
-import { Clapperboard, Download, Film, Minus, Plus } from "lucide-react";
+import { Clapperboard, Download, Film, FolderOpen, Minus, Plus } from "lucide-react";
 import { api, lastJob, runningJob, useProject, useProjectAction } from "@/lib/client";
 import { DoodleVideo } from "@/remotion/DoodleVideo";
 import { ProductAd } from "@/remotion/ProductAd";
@@ -221,6 +221,12 @@ export default function RenderPage() {
                   <a href={`/api/projects/${id}/export?type=srt`}>
                     <Button icon={<Download className="size-4" />}>SRT</Button>
                   </a>
+                  <Button
+                    icon={<FolderOpen className="size-4" />}
+                    title={t("media.render.showInFinder")}
+                    aria-label={t("media.render.showInFinder")}
+                    onClick={() => act.mutate({ action: "revealRender" })}
+                  />
                 </div>
               ) : null}
             </Card>
