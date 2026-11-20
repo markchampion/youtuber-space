@@ -2,6 +2,7 @@ import "server-only";
 import crypto from "node:crypto";
 import fs from "node:fs";
 import { eq } from "drizzle-orm";
+import pLimit from "p-limit";
 import { db, schema } from "@/lib/db";
 import { env, sampleRateFromFormat } from "@/lib/env";
 import { DEFAULT_VOICE_SETTINGS, pacingOf, type VoiceOverride } from "@/lib/channel";
@@ -89,47 +90,71 @@ export function startVoiceJob(projectId: string, onlyParagraphIds?: string[]) {
       ? all.filter((p) => onlyParagraphIds.includes(p.id))
       : all.filter((p) => p.status !== "done" || p.voiceHash !== hashFor(p.text, cfg));
 
+    // Takes made before with exactly this text and voice (e.g. switching back to an earlier tone) are reused for free.
     let reused = 0;
-    for (const [n, para] of todo.entries()) {
+    const fresh: typeof todo = [];
+    for (const para of todo) {
       const hash = hashFor(para.text, cfg);
-      // A take with exactly this text and voice was made before (e.g. switching back to an earlier tone): reuse it for free.
       const cached = readTake(projectId, para.id, hash);
-      if (cached) {
-        db.update(schema.paragraphs)
-          .set({ status: "done", error: null, audioPath: cached.audioPath, sampleCount: cached.sampleCount, sampleRate: cached.sampleRate, sentenceTimes: cached.sentenceTimes, voiceHash: hash })
-          .where(eq(schema.paragraphs.id, para.id))
-          .run();
-        reused++;
+      if (!cached) {
+        fresh.push(para);
         continue;
       }
-      ctx.progress(n / (todo.length + 1), `Voicing paragraph ${para.idx + 1} (${n + 1}/${todo.length})${reused ? `, ${reused} reused` : ""}`);
-      db.update(schema.paragraphs).set({ status: "generating", error: null }).where(eq(schema.paragraphs.id, para.id)).run();
-      try {
-        const res = await ttsProvider().synthesizeParagraph({
-          text: para.text,
-          voiceId: cfg.voiceId,
-          settings: cfg.settings,
-          pronunciations: cfg.pronunciations,
-          previousText: all[para.idx - 1]?.text,
-          nextText: all[para.idx + 1]?.text,
-          projectId,
-          locale: cfg.locale,
-        });
-        const rel = writeMedia(takePath(projectId, para.id, hash), pcmToWav(res.pcm, res.sampleRate));
-        const take = { sampleCount: res.sampleCount, sampleRate: res.sampleRate, sentenceTimes: res.sentenceTimes };
-        writeMedia(takePath(projectId, para.id, hash, "json"), Buffer.from(JSON.stringify(take)));
-        db.update(schema.paragraphs)
-          .set({ status: "done", audioPath: rel, ...take, voiceHash: hash })
-          .where(eq(schema.paragraphs.id, para.id))
-          .run();
-      } catch (e) {
-        db.update(schema.paragraphs)
-          .set({ status: "error", error: e instanceof Error ? e.message : String(e) })
-          .where(eq(schema.paragraphs.id, para.id))
-          .run();
-        throw e;
-      }
+      db.update(schema.paragraphs)
+        .set({ status: "done", error: null, audioPath: cached.audioPath, sampleCount: cached.sampleCount, sampleRate: cached.sampleRate, sentenceTimes: cached.sentenceTimes, voiceHash: hash })
+        .where(eq(schema.paragraphs.id, para.id))
+        .run();
+      reused++;
     }
+
+    // Settings → "Parallel voice requests": several paragraphs at once. Each paragraph still gets its
+    // neighbours' text for natural intonation, so the order they finish in doesn't matter.
+    const limit = pLimit(env.voiceConcurrency);
+    let finished = 0;
+    let failure: unknown = null;
+    const report = () =>
+      ctx.progress(
+        (reused + finished) / (todo.length + 1),
+        `Voicing paragraphs (${finished}/${fresh.length} done${limit.concurrency > 1 ? `, ${limit.concurrency} at a time` : ""})${reused ? `, ${reused} reused` : ""}`,
+      );
+    report();
+    await Promise.all(
+      fresh.map((para) =>
+        limit(async () => {
+          if (failure) return; // stop starting new paragraphs after the first error
+          const hash = hashFor(para.text, cfg);
+          db.update(schema.paragraphs).set({ status: "generating", error: null }).where(eq(schema.paragraphs.id, para.id)).run();
+          try {
+            const res = await ttsProvider().synthesizeParagraph({
+              text: para.text,
+              voiceId: cfg.voiceId,
+              settings: cfg.settings,
+              pronunciations: cfg.pronunciations,
+              previousText: all[para.idx - 1]?.text,
+              nextText: all[para.idx + 1]?.text,
+              projectId,
+              locale: cfg.locale,
+            });
+            const rel = writeMedia(takePath(projectId, para.id, hash), pcmToWav(res.pcm, res.sampleRate));
+            const take = { sampleCount: res.sampleCount, sampleRate: res.sampleRate, sentenceTimes: res.sentenceTimes };
+            writeMedia(takePath(projectId, para.id, hash, "json"), Buffer.from(JSON.stringify(take)));
+            db.update(schema.paragraphs)
+              .set({ status: "done", audioPath: rel, ...take, voiceHash: hash })
+              .where(eq(schema.paragraphs.id, para.id))
+              .run();
+            finished++;
+            report();
+          } catch (e) {
+            failure ??= e;
+            db.update(schema.paragraphs)
+              .set({ status: "error", error: e instanceof Error ? e.message : String(e) })
+              .where(eq(schema.paragraphs.id, para.id))
+              .run();
+          }
+        }),
+      ),
+    );
+    if (failure) throw failure;
     ctx.progress(todo.length / (todo.length + 1), `Stitching audio${reused ? ` (${reused} paragraph${reused > 1 ? "s" : ""} reused from earlier takes)` : ""}`);
     stitch(projectId);
   });

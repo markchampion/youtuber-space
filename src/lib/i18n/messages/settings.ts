@@ -137,6 +137,10 @@ export const en = {
       options: { pcm_24000: "24 kHz (all plans)", pcm_44100: "44.1 kHz (Pro plan)" },
     },
     IMAGE_CONCURRENCY: { label: "Parallel image requests", help: "Lower this if OpenAI returns rate-limit errors." },
+    VOICE_CONCURRENCY: {
+      label: "Parallel voice requests",
+      help: "How many paragraphs are voiced at once. ElevenLabs allows 2 (Free) to 10+ (Pro) at a time; lower this if it returns rate-limit errors. A local TTS server may not get faster above 1-2.",
+    },
     RENDER_CONCURRENCY: {
       label: "Parallel video renders",
       help: "Each MP4 render runs a headless Chrome. Batches queue renders beyond this number. Raise it only on a fast machine.",
@@ -296,6 +300,10 @@ export const vi: Translation<typeof en> = {
       options: { pcm_24000: "24 kHz (mọi gói)", pcm_44100: "44.1 kHz (gói Pro)" },
     },
     IMAGE_CONCURRENCY: { label: "Yêu cầu hình ảnh song song", help: "Giảm số này nếu OpenAI báo lỗi giới hạn tốc độ." },
+    VOICE_CONCURRENCY: {
+      label: "Yêu cầu giọng đọc song song",
+      help: "Số đoạn được đọc cùng lúc. ElevenLabs cho phép từ 2 (Free) đến 10+ (Pro) yêu cầu cùng lúc; giảm số này nếu bị lỗi giới hạn tốc độ. Máy chủ TTS cục bộ có thể không nhanh hơn khi đặt trên 1-2.",
+    },
     RENDER_CONCURRENCY: {
       label: "Xuất video song song",
       help: "Mỗi lần xuất MP4 chạy một Chrome ẩn. Các lô sẽ xếp hàng phần vượt quá số này. Chỉ tăng khi máy đủ mạnh.",

@@ -32,6 +32,9 @@ export const env = {
   get renderConcurrency() {
     return Math.max(1, Number(getSetting("RENDER_CONCURRENCY")) || 1);
   },
+  get voiceConcurrency() {
+    return Math.max(1, Number(getSetting("VOICE_CONCURRENCY")) || 1);
+  },
   get imageConcurrency() {
     return Math.max(1, Number(getSetting("IMAGE_CONCURRENCY")) || 4);
   },

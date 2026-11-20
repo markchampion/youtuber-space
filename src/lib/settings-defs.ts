@@ -26,6 +26,7 @@ export type SettingKey =
   | "ELEVENLABS_OUTPUT_FORMAT"
   | "OPENAI_IMAGE_MODEL"
   | "IMAGE_CONCURRENCY"
+  | "VOICE_CONCURRENCY"
   | "RENDER_CONCURRENCY"
   | "DRY_RUN";
 
@@ -138,6 +139,13 @@ export const MODEL_SETTINGS: SettingDef[] = [
     help: "Lower this if OpenAI returns rate-limit errors.",
     default: "4",
     options: ["1", "2", "4", "6", "8"].map((v) => ({ value: v, label: v })),
+  },
+  {
+    key: "VOICE_CONCURRENCY",
+    label: "Parallel voice requests",
+    help: "How many paragraphs are voiced at once. ElevenLabs allows 2 (Free) to 10+ (Pro) at a time; lower this if it returns rate-limit errors. A local TTS server may not get faster above 1-2.",
+    default: "1",
+    options: ["1", "2", "3", "4", "6", "8"].map((v) => ({ value: v, label: v })),
   },
   {
     key: "RENDER_CONCURRENCY",
